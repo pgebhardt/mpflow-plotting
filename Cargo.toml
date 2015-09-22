@@ -1,0 +1,7 @@
+[package]
+name = "01-window"
+version = "0.1.0"
+authors = ["Patrik Gebhardt <patrik.gebhardt@rub.de>"]
+
+[dependencies]
+glium = "*"
