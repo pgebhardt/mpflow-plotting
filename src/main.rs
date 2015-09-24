@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate glium;
+extern crate nalgebra as na;
+use na::{PerspMat3, Iso3, Mat3, Pnt3, Vec3, ToHomogeneous, Eye};
 
 mod teapot;
 
@@ -19,56 +21,6 @@ fn load_file(path: &Path) -> io::Result<String> {
     Ok(contents)
 }
 
-fn create_perspective_matrix(dimensions: (u32, u32)) -> [[f32; 4]; 4] {
-    let (width, height) = dimensions;
-    let aspect_ratio = height as f32 / width as f32;
-    
-    let fov = std::f32::consts::PI / 3.0;
-    let z_far = 1024.0f32;
-    let z_near = 0.1f32;
-    
-    let f = 1.0 / (fov / 2.0).tan();
-    
-    [
-        [f * aspect_ratio   ,   0.0 ,                   0.0                     ,   0.0],
-        [       0.0         ,   f   ,                   0.0                     ,   0.0],
-        [       0.0         ,   0.0 ,   (z_far + z_near) / (z_far - z_near)     ,   1.0],
-        [       0.0         ,   0.0 ,-(2.0 * z_far * z_near) / (z_far - z_near) ,   0.0],
-    ]       
-}
-
-fn cross(a: &[f32; 3], b: &[f32; 3]) -> [f32; 3] {
-    [a[1] * b[2] - a[2] * b[1],
-    a[2] * b[0] - a[0] * b[2],
-    a[0] * b[1] - a[1] * b[0]]
-}
-
-fn dot(a: &[f32; 3], b: &[f32; 3]) -> f32 {
-    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-}
-
-fn normalize(x: &[f32; 3]) -> [f32; 3] {
-    let len = (x[0] * x[0] + x[1] * x[1] + x[2] * x[2]).sqrt();
-    
-    [x[0] / len, x[1] / len, x[2] / len]
-}
- 
-fn create_view_matrix(position: &[f32; 3], direction: &[f32; 3], up: &[f32; 3]) -> [[f32; 4]; 4] {
-    let f = normalize(direction);
-    let s = cross(up, &f);
-    let s_norm = normalize(&s);
-    
-    let u = cross(&f, &s_norm);
-    let p = [-dot(&position, &s_norm), -dot(&position, &u), -dot(&position, &f)];
-    
-    [
-        [s[0], u[0], f[0], 0.0],
-        [s[1], u[1], f[1], 0.0],
-        [s[2], u[2], f[2], 0.0],
-        [p[0], p[1], p[2], 1.0],
-    ]
-}           
-
 fn main() {
     // use glium display builder trait to create a window with openGL context
     // use Surface trait to get standard frame manipulation functionality
@@ -76,7 +28,7 @@ fn main() {
     
     // create window
     let display = glium::glutin::WindowBuilder::new()
-        .with_dimensions(640, 640)
+        .with_dimensions(640, 480)
         .with_title("13-blinn_phong".to_string())
         .with_vsync()
         .with_multisampling(16)
@@ -110,14 +62,6 @@ fn main() {
     // direction of light source
     let light = [1.4, 0.4, -0.7f32];
     
-    // create model transformation matrix
-    let model = [
-        [0.01, 0.0, 0.0, 0.0],
-        [0.0, 0.01, 0.0, 0.0],
-        [0.0, 0.0, 0.01, 0.0],
-        [0.0, 0.0, 2.0, 1.0f32],
-    ];
-    
     // start event loop, exit loop when window closes
     let mut t = 0.0f32;
     loop {
@@ -127,16 +71,22 @@ fn main() {
         }
 
         // create view matrix
-        let view = create_view_matrix(&[2.0 * t.sin(), 0.0, -2.0 * t.cos() + 2.0], &[-2.0 * t.sin(), 0.0, 2.0 * t.cos()], &[0.0, 1.0, 0.0]);
+        let mut view: Iso3<f32> = na::one();
+        view.look_at_z(&Pnt3::new(0.0, 0.0, 0.0), &Pnt3::new(0.0, 0.0, 1.0), &Vec3::new(0.0, 1.0, 0.0));
+        let view = view.to_homogeneous();
         
-        // create transformation matrix
+        // create model transformation matrix
+        let model = Iso3::new(Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, t, 0.0)).to_homogeneous() *
+            (Mat3::new_identity(3) * 0.01).to_homogeneous();
+        
         // start drawing on the frame
         let mut target = display.draw();
         target.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
 
         // create the perspective matrix
-        let perspective = create_perspective_matrix(target.get_dimensions());
-
+        let (width, height) = target.get_dimensions();
+        let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 3.0, 0.1, 1024.0);
+        
         // draw shape
         target.draw((&positions, &normals), &indices, &program,
             &uniform!{ perspective: perspective, view: view, model: model, u_light: light},
