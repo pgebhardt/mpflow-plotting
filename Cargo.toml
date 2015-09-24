@@ -1,7 +1,8 @@
 [package]
-name = "01-window"
+name = "13-blinn_phong"
 version = "0.1.0"
 authors = ["Patrik Gebhardt <patrik.gebhardt@rub.de>"]
+include = ["shaders/vertex.glsl", "shaders/fragment.glsl"]
 
 [dependencies]
 glium = "*"
