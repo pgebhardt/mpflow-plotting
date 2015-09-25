@@ -25,7 +25,9 @@ fn main() {
     // use glium display builder trait to create a window with openGL context
     // use Surface trait to get standard frame manipulation functionality
     use glium::{DisplayBuild, Surface};
-    
+    use glium::glutin::{ElementState, MouseButton};
+    use glium::glutin::Event::{Closed, MouseInput, MouseMoved};
+
     // create window
     let display = glium::glutin::WindowBuilder::new()
         .with_dimensions(640, 480)
@@ -63,6 +65,8 @@ fn main() {
     let light = [1.4, 0.4, -0.7f32];
     
     // start event loop, exit loop when window closes
+    let mut mouse_pressed = false;
+    let mut old_mouse_pos = (0i32, 0i32);
     let mut t = 0.0f32;
     loop {
         t += 1e-2;
@@ -98,8 +102,11 @@ fn main() {
         // listen to the events produced by the window
         for ev in display.poll_events() {
             match ev {
-                glium::glutin::Event::Closed => return,
-                _ => ()
+                Closed => return,
+                MouseInput(ElementState::Pressed, MouseButton::Left) => mouse_pressed = true,
+                MouseInput(ElementState::Released, MouseButton::Left) => mouse_pressed = false,
+                MouseMoved((x, y)) => println!("x: {}, y: {}", x, y),
+                _ => () 
             }
         }
     }
