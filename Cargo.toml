@@ -1,5 +1,5 @@
 [package]
-name = "13-blinn_phong"
+name = "shadows"
 version = "0.1.0"
 authors = ["Patrik Gebhardt <patrik.gebhardt@rub.de>"]
 include = ["shaders/vertex.glsl", "shaders/fragment.glsl"]
