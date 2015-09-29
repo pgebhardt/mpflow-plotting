@@ -10,7 +10,7 @@ fn main() {
     use glium::{DisplayBuild, Surface};
     use glium::glutin::{ElementState, MouseButton};
     use glium::glutin::Event::{Closed, MouseInput, MouseMoved};
-    use nalgebra::{PerspMat3, OrthoMat3, Iso3, Mat3, Pnt3, Vec3, ToHomogeneous, Eye, Rot3};
+    use nalgebra::{PerspMat3, Iso3, Mat3, Pnt3, Vec3, ToHomogeneous, Eye, Rot3};
 
     // create window
     let display = glium::glutin::WindowBuilder::new()
@@ -31,16 +31,15 @@ fn main() {
     #[derive(Copy, Clone)]
     struct Vertex {
         position: [f32; 3],
-        normal: [f32; 3],
-        tex_coords: [f32; 2]
+        normal: [f32; 3]
     }
-    implement_vertex!(Vertex, position, normal, tex_coords);
+    implement_vertex!(Vertex, position, normal);
     
     let shape = glium::vertex::VertexBuffer::new(&display, &[
-        Vertex { position: [-200.0, -200.0, 200.0], normal: [0.0, 0.0, -1.0], tex_coords: [0.0, 0.0] },
-        Vertex { position: [-200.0, 200.0, 200.0], normal: [0.0, 0.0, -1.0], tex_coords: [0.0, 1.0] },
-        Vertex { position: [ 200.0, -200.0, 200.0], normal: [0.0, 0.0, -1.0], tex_coords: [1.0, 0.0] },
-        Vertex { position: [ 200.0, 200.0, 200.0], normal: [0.0, 0.0, -1.0], tex_coords: [1.0, 1.0] },
+        Vertex { position: [-200.0, -50.0,  200.0], normal: [0.0, 1.0, 0.0] },
+        Vertex { position: [ 200.0, -50.0,  200.0], normal: [0.0, 1.0, 0.0] },
+        Vertex { position: [-200.0, -50.0, -200.0], normal: [0.0, 1.0, 0.0] },
+        Vertex { position: [ 200.0, -50.0, -200.0], normal: [0.0, 1.0, 0.0] },
         ]).unwrap();
         
     // create shadow map
@@ -49,14 +48,18 @@ fn main() {
         glium::texture::DepthFormat::I16, glium::texture::MipmapsOption::NoMipmap, 1024, 1024).unwrap();
     let mut shadow_buffer = glium::framebuffer::SimpleFrameBuffer::with_depth_buffer(&display,
         &shadow_color_texture, &shadow_texture).unwrap();
+    let shadow_bias = [
+        [0.5, 0.0, 0.0, 0.0],
+        [0.0, 0.5, 0.0, 0.0],
+        [0.0, 0.0, 0.5, 0.0],
+        [0.5, 0.5, 0.5, 1.0f32]
+        ];
         
     // create glium program
     let program = glium::Program::from_source(&display, include_str!("shaders/vertex.glsl"),
         include_str!("shaders/fragment.glsl"), None).unwrap();
     let shadow_program = glium::Program::from_source(&display, include_str!("shaders/vertex_shadow.glsl"),
         include_str!("shaders/fragment_shadow.glsl"), None).unwrap();
-    let texture_program = glium::Program::from_source(&display, include_str!("shaders/vertex_texture.glsl"),
-        include_str!("shaders/fragment_texture.glsl"), None).unwrap();
     
     // create draw parameter struct and enable depth testing
     let params = glium::DrawParameters {
@@ -78,8 +81,6 @@ fn main() {
     let mut old_mouse_pos = (0.0f32, 0.0f32);
     let mut rot_angle = (0.0f32, 0.0f32);
     loop {
-        let mut view: Iso3<f32> = nalgebra::one();
-       
         // create model transformation matrix
         let model = Iso3::new(Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous() *
             (Mat3::new_identity(3) * 0.01).to_homogeneous() *
@@ -87,15 +88,13 @@ fn main() {
             (Rot3::new(Vec3::new(0.0, 2.0 * std::f32::consts::PI * rot_angle.0, 0.0))).to_homogeneous();
         
         // rander shadow map
-        let perspective = OrthoMat3::new(5.0f32, 5.0, -10.0, 20.0);
-        view.look_at_z(&Pnt3::new(light_pos[0], light_pos[1], light_pos[2]), &Pnt3::new(0.0, 0.0, 2.0), &Vec3::new(0.0, 0.0, 1.0));
+        let shadow_perspective = PerspMat3::new(1.0, std::f32::consts::PI / 2.0, 0.1, 10.0);
+        let mut shadow_view: Iso3<f32> = nalgebra::one();
+        shadow_view.look_at_z(&Pnt3::new(light_pos[0], -light_pos[1], light_pos[2]), &Pnt3::new(0.0, 0.0, 2.0), &Vec3::new(0.0, 0.0, -1.0));
         
         shadow_buffer.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
         shadow_buffer.draw((&positions, &normals), &indices, &shadow_program,
-            &uniform!{ perspective: perspective, view: view.to_homogeneous(), model: model },
-            &params).unwrap();
-        shadow_buffer.draw(&shape, &glium::index::NoIndices(glium::index::PrimitiveType::TriangleStrip), &shadow_program,
-            &uniform!{ perspective: perspective, view: view.to_homogeneous(), model: model },
+            &uniform!{ perspective: shadow_perspective, view: shadow_view.to_homogeneous(), model: model },
             &params).unwrap();
         
         // start drawing on the frame
@@ -104,17 +103,22 @@ fn main() {
 
         // create the perspective matrix
         let (width, height) = target.get_dimensions();
-        let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 3.0, 0.1, 1024.0);
-        view.look_at_z(&Pnt3::new(0.0, 0.0, 0.0), &Pnt3::new(0.0, 0.0, 1.0), &Vec3::new(0.0, 1.0, 0.0));
+        let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 3.0, 0.1, 10.0);
         
+        // create view matrix
+        let mut view: Iso3<f32> = nalgebra::one();
+        view.look_at_z(&Pnt3::new(0.0, 0.0, 2.0), &Pnt3::new(0.0, 0.0, 3.0), &Vec3::new(0.0, 1.0, 0.0));
+
         // draw shape
-        /*target.draw((&positions, &normals), &indices, &program,
-            &uniform!{ perspective: perspective, view: view.to_homogeneous(), model: model, light_pos: light_pos },
-            &params).unwrap();*/
-        
-        target.draw(&shape, &glium::index::NoIndices(glium::index::PrimitiveType::TriangleStrip), &texture_program,
+        target.draw((&positions, &normals), &indices, &program,
             &uniform!{ perspective: perspective, view: view.to_homogeneous(), model: model, light_pos: light_pos,
-            tex: &shadow_texture },
+                shadow_bias: shadow_bias, shadow_perspective: shadow_perspective, shadow_view: shadow_view.to_homogeneous(),
+                shadow_map: &shadow_texture },
+            &params).unwrap();
+        target.draw(&shape, &glium::index::NoIndices(glium::index::PrimitiveType::TriangleStrip), &program,
+            &uniform!{ perspective: perspective, view: view.to_homogeneous(), model: model, light_pos: light_pos,
+                shadow_bias: shadow_bias, shadow_perspective: shadow_perspective, shadow_view: shadow_view.to_homogeneous(),
+                shadow_map: &shadow_texture },
             &params).unwrap();
             
         // drawing is finished, so swap buffers
