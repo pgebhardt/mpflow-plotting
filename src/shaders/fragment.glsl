@@ -2,13 +2,13 @@
 
 in vec3 v_normal;
 in vec3 v_position;
+in vec3 v_color;
 in vec3 camera_dir;
 in vec4 shadow_position;
 
 out vec4 frag_color;
 
 uniform vec3 light_pos;
-uniform vec3 diffuse_color;
 uniform mat4 view;
 uniform sampler2D shadow_map;
 
@@ -24,11 +24,11 @@ void main() {
 	float specular = diffuse >= 0.0 ? pow(max(dot(half_dir, normalize(v_normal)), 0.0), 16.0) : 0.0;
 	
 	// get visibility from shadow map
-	float bias = clamp(0.005 * tan(acos(clamp(dot(normalize(v_normal), light_dir), 0.0, 1.0))), 0.0, 0.01);
+	float bias = 1e-4 * clamp(tan(acos(clamp(dot(normalize(v_normal), light_dir), 0.0, 1.0))), 0.0, 4.0);
 	if (texture(shadow_map, shadow_position.xy / shadow_position.w).r < (shadow_position.z - bias) / shadow_position.w) {
 		diffuse *= 0.5;
 		specular = 0.0;
 	}
 	
-	frag_color = vec4(0.2 * diffuse_color + diffuse * diffuse_color + specular * specular_color, 1.0);
+	frag_color = vec4((0.2 + diffuse) * v_color + specular * specular_color, 1.0);
 }

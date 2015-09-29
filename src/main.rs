@@ -4,16 +4,15 @@ extern crate nalgebra;
 extern crate obj;
 extern crate genmesh;
 
-fn load_wavefront(display: &glium::Display, data: &[u8]) -> glium::vertex::VertexBufferAny {
-    // vertex format
-    #[derive(Copy, Clone)]
-    struct Vertex {
-        position: [f32; 3],
-        normal: [f32; 3],
-        texture: [f32; 2],
-    }
-    implement_vertex!(Vertex, position, normal, texture);
+// vertex format
+#[derive(Copy, Clone)]
+struct Vertex {
+    position: [f32; 3],
+    normal: [f32; 3],
+    color: [f32; 3]
+}
     
+fn load_wavefront(display: &glium::Display, data: &[u8]) -> glium::vertex::VertexBufferAny {
     // load wavefrom from data
     let mut data = std::io::BufReader::new(data);
     let data = obj::Obj::load(&mut data);
@@ -25,16 +24,12 @@ fn load_wavefront(display: &glium::Display, data: &[u8]) -> glium::vertex::Verte
             &genmesh::Polygon::PolyTri(genmesh::Triangle { x: v1, y: v2, z: v3 }) => {
                 for v in [v1, v2, v3].iter() {
                     let position = data.position()[v.0];
-                    let texture = v.1.map(|index| data.texture()[index]);
                     let normal = v.2.map(|index| data.normal()[index]);
-                    
-                    let texture = texture.unwrap_or([0.0, 0.0]);
-                    let normal = normal.unwrap_or([0.0, 0.0, 0.0]);
                     
                     vertex_data.push(Vertex {
                         position: position,
-                        normal: normal,
-                        texture: texture,
+                        normal: normal.unwrap_or([0.0, 0.0, 0.0]),
+                        color: [0.6, 0.0, 0.0]
                     })
                 }
             },
@@ -51,19 +46,14 @@ fn main() {
     use glium::{DisplayBuild, Surface};
     use glium::glutin::{ElementState, MouseButton};
     use glium::glutin::Event::{Closed, MouseInput, MouseMoved};
-    use nalgebra::{PerspMat3, Iso3, Mat3, Pnt3, Vec3, ToHomogeneous, Eye, Rot3};
+    use nalgebra::{PerspMat3, Iso3, Mat3, Vec3, ToHomogeneous, Eye, Rot3};
 
-    // create some shape
-    #[derive(Copy, Clone)]
-    struct Vertex {
-        position: [f32; 3],
-        normal: [f32; 3]
-    }
-    implement_vertex!(Vertex, position, normal);
+    // make vertex format available to glium
+    implement_vertex!(Vertex, position, normal, color);
     
     // create window
     let display = glium::glutin::WindowBuilder::new()
-        .with_dimensions(640, 480)
+        .with_dimensions(800, 600)
         .with_title("shadows".to_string())
         .with_vsync()
         .with_multisampling(16)
@@ -73,10 +63,10 @@ fn main() {
     // generate some shapes
     let teapot = load_wavefront(&display, include_bytes!("obj/teapot.obj"));
     let table = glium::vertex::VertexBuffer::new(&display, &[
-        Vertex { position: [-200.0, -50.0,  200.0], normal: [0.0, 1.0, 0.0] },
-        Vertex { position: [ 200.0, -50.0,  200.0], normal: [0.0, 1.0, 0.0] },
-        Vertex { position: [-200.0, -50.0, -200.0], normal: [0.0, 1.0, 0.0] },
-        Vertex { position: [ 200.0, -50.0, -200.0], normal: [0.0, 1.0, 0.0] },
+        Vertex { position: [-200.0, -50.0,  200.0], normal: [0.0, 1.0, 0.0], color: [0.6, 0.6, 0.6] },
+        Vertex { position: [ 200.0, -50.0,  200.0], normal: [0.0, 1.0, 0.0], color: [0.6, 0.6, 0.6] },
+        Vertex { position: [-200.0, -50.0, -200.0], normal: [0.0, 1.0, 0.0], color: [0.6, 0.6, 0.6] },
+        Vertex { position: [ 200.0, -50.0, -200.0], normal: [0.0, 1.0, 0.0], color: [0.6, 0.6, 0.6] },
         ]).unwrap();
         
     // create shadow map
@@ -85,12 +75,6 @@ fn main() {
         glium::texture::DepthFormat::F32, glium::texture::MipmapsOption::NoMipmap, 2048, 2048).unwrap();
     let mut shadow_buffer = glium::framebuffer::SimpleFrameBuffer::with_depth_buffer(&display,
         &shadow_color_texture, &shadow_texture).unwrap();
-    let shadow_bias = [
-        [0.5, 0.0, 0.0, 0.0],
-        [0.0, 0.5, 0.0, 0.0],
-        [0.0, 0.0, 0.5, 0.0],
-        [0.5, 0.5, 0.5, 1.0f32]
-        ];
         
     // create glium program
     let program = glium::Program::from_source(&display, include_str!("shaders/vertex.glsl"),
@@ -125,17 +109,17 @@ fn main() {
             (Rot3::new(Vec3::new(0.0, 2.0 * std::f32::consts::PI * rot_angle.0, 0.0))).to_homogeneous();
         
         // rander shadow map
-        let shadow_perspective = PerspMat3::new(1.0, std::f32::consts::PI / 2.0, 0.1, 10.0);
+        shadow_buffer.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
+
+        let shadow_perspective = PerspMat3::new(1.0, std::f32::consts::PI / 1.5, 0.1, 10.0);
         let shadow_view = (Rot3::new(Vec3::new(-std::f32::consts::PI / 2.0, 0.0, 0.0))).to_homogeneous() *
             Iso3::new(-Vec3::new(light_pos[0], light_pos[1], light_pos[2]), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
+        let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model }; 
 
-        shadow_buffer.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
-        shadow_buffer.draw(&teapot, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList), &shadow_program,
-            &uniform!{ perspective: shadow_perspective, view: shadow_view, model: model },
-            &params).unwrap();
-        shadow_buffer.draw(&table, &glium::index::NoIndices(glium::index::PrimitiveType::TriangleStrip), &shadow_program,
-            &uniform!{ perspective: shadow_perspective, view: shadow_view, model: model },
-            &params).unwrap();
+        shadow_buffer.draw(&teapot, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
+            &shadow_program, &shadow_uniforms, &params).unwrap();
+        shadow_buffer.draw(&table, &glium::index::NoIndices(glium::index::PrimitiveType::TriangleStrip),
+            &shadow_program, &shadow_uniforms, &params).unwrap();
         
         // start drawing on the frame
         let mut target = display.draw();
@@ -146,22 +130,22 @@ fn main() {
         let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 3.0, 0.1, 10.0);
         
         // create view matrix
-        let mut view: Iso3<f32> = nalgebra::one();
-        view.look_at_z(&Pnt3::new(0.0, 0.0, 2.0), &Pnt3::new(0.0, 0.0, 3.0), &Vec3::new(0.0, 1.0, 0.0));
-        
+        let view = Iso3::new(Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
+
         // draw shape
+        let uniforms = uniform!{ light_pos: light_pos,
+            perspective: perspective, view: view, model: model,
+            shadow_perspective: shadow_perspective, shadow_view: shadow_view,
+            shadow_map: shadow_texture.sampled()
+                .minify_filter(glium::uniforms::MinifySamplerFilter::Linear)
+                .magnify_filter(glium::uniforms::MagnifySamplerFilter::Linear)
+                .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp),
+            };
+            
         target.draw(&teapot, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList), &program,
-            &uniform!{ perspective: perspective, view: view.to_homogeneous(), model: model, light_pos: light_pos, diffuse_color: [0.6, 0.0, 0.0f32],
-                shadow_bias: shadow_bias, shadow_perspective: shadow_perspective, shadow_view: shadow_view,
-                shadow_map: shadow_texture.sampled().minify_filter(glium::uniforms::MinifySamplerFilter::Linear)
-                    .magnify_filter(glium::uniforms::MagnifySamplerFilter::Linear).wrap_function(glium::uniforms::SamplerWrapFunction::Clamp) },
-            &params).unwrap();
+            &uniforms, &params).unwrap();
         target.draw(&table, &glium::index::NoIndices(glium::index::PrimitiveType::TriangleStrip), &program,
-            &uniform!{ perspective: perspective, view: view.to_homogeneous(), model: model, light_pos: light_pos, diffuse_color: [0.6, 0.6, 0.6f32],
-                shadow_bias: shadow_bias, shadow_perspective: shadow_perspective, shadow_view: shadow_view,
-                shadow_map: shadow_texture.sampled().minify_filter(glium::uniforms::MinifySamplerFilter::Linear)
-                    .magnify_filter(glium::uniforms::MagnifySamplerFilter::Linear).wrap_function(glium::uniforms::SamplerWrapFunction::Clamp) },
-            &params).unwrap();
+            &uniforms, &params).unwrap();
             
         // drawing is finished, so swap buffers
         target.finish().unwrap();
