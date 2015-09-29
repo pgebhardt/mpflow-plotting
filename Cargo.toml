@@ -7,3 +7,5 @@ include = ["shaders/vertex.glsl", "shaders/fragment.glsl"]
 [dependencies]
 nalgebra = "0.2"
 glium = "*"
+genmesh = "*"
+obj = "*"
