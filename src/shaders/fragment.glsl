@@ -2,7 +2,7 @@
 
 in vec3 v_normal;
 in vec3 v_position;
-in vec3 v_color;
+in float v_value;
 in vec3 camera_dir;
 in vec4 shadow_position;
 
@@ -12,9 +12,24 @@ uniform vec3 light_pos;
 uniform mat4 view;
 uniform sampler2D shadow_map;
 
-const vec3 specular_color = vec3(1.0, 1.0, 1.0);
+const vec3 specular_color = vec3(1.0, 1.0, 224.0 / 255.0);
+
+vec3 jet_color(float value) {
+	// correct value space
+	float normalized_value = 0.5 * value + 0.5;
+	
+	// calculate colors
+	float red = min(max(-4.0 * abs(normalized_value - 0.75) + 1.5, 0.0), 1.0);
+    float green = min(max(-4.0 * abs(normalized_value - 0.5) + 1.5, 0.0), 1.0);
+    float blue = min(max(-4.0 * abs(normalized_value - 0.25) + 1.5, 0.0), 1.0);
+	
+	return vec3(red, green, blue);
+}
 
 void main() {
+	// calculate color;
+	vec3 v_color = jet_color(v_value);
+		
 	// calculate direction to light source
 	vec3 light_dir = normalize(light_pos - v_position);
 
@@ -30,5 +45,7 @@ void main() {
 		specular = 0.0;
 	}
 	
-	frag_color = vec4((0.2 + diffuse) * v_color + specular * specular_color, 1.0);
+	// calculate fragment color
+	frag_color = pow(vec4((0.2 + 0.6 * diffuse) * v_color + 0.2 * specular * specular_color, 1.0),
+		vec4(2.2, 2.2, 2.2, 2.2));
 }

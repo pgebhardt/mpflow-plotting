@@ -1,43 +1,110 @@
 #[macro_use]
 extern crate glium;
 extern crate nalgebra;
-extern crate obj;
-extern crate genmesh;
+extern crate num;
+
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::str::FromStr;
+use num::traits::Float;
 
 // vertex format
 #[derive(Copy, Clone)]
 struct Vertex {
     position: [f32; 3],
     normal: [f32; 3],
-    color: [f32; 3]
+    value: f32,
 }
     
-fn load_wavefront(display: &glium::Display, data: &[u8]) -> glium::vertex::VertexBufferAny {
-    // load wavefrom from data
-    let mut data = std::io::BufReader::new(data);
-    let data = obj::Obj::load(&mut data);
+fn load_file<T: FromStr>(filename: &str) -> Vec<Vec<T>> {
+    // open file
+    let f = BufReader::new(File::open(filename).unwrap());
     
-    // extract all vertices from model
-    let mut vertex_data = Vec::new();
-    for shape in data.object_iter().next().unwrap().group_iter().flat_map(|g| g.indices.iter()) {
-        match shape {
-            &genmesh::Polygon::PolyTri(genmesh::Triangle { x: v1, y: v2, z: v3 }) => {
-                for v in [v1, v2, v3].iter() {
-                    let position = data.position()[v.0];
-                    let normal = v.2.map(|index| data.normal()[index]);
-                    
-                    vertex_data.push(Vertex {
-                        position: position,
-                        normal: normal.unwrap_or([0.0, 0.0, 0.0]),
-                        color: [0.6, 0.0, 0.0]
-                    })
-                }
-            },
-            _ => unimplemented!()
+    // read something
+    let arr: Vec<Vec<T>> = f.lines()
+        .map(|l| l.unwrap().split(char::is_whitespace)
+            .map(|number| number.parse().ok().unwrap())
+            .collect())
+        .collect();
+    
+    arr
+}
+
+fn load_measurement(filename: &str) -> Vec<Vec<f32>> {
+    // open file
+    let f = BufReader::new(File::open(filename).unwrap());
+    
+    // read something
+    let mut arr: Vec<Vec<f32>> = f.lines()
+        .map(|l| {
+            let line = l.unwrap();
+            
+            if &line[0..1] == "(" {
+                return (&line[1..line.len()-1]).to_string().split(',').map(|number| number.parse().ok().unwrap()).collect(); 
+            }
+            else {
+                return vec![line.parse().ok().unwrap()];             
+            }
+        })
+        .collect();
+    
+    // correct real part
+    let norm_real = (-arr.iter().fold(0.0f32, |acc, ref item| acc.min(item[0] - 1.0))).max(
+        arr.iter().fold(0.0f32, |acc, ref item| acc.max(item[0] - 1.0)));
+    for v in arr.iter_mut() {
+        v[0] = (v[0] - 1.0) / norm_real;
+    }
+    
+    // correct imaginary part
+    if arr[0].len() > 1 {
+        let norm_imag = (-arr.iter().fold(0.0f32, |acc, ref item| acc.min(item[1]))).max(
+            arr.iter().fold(0.0f32, |acc, ref item| acc.max(item[1])));
+        for v in arr.iter_mut() {
+            v[1] = v[1] / norm_imag;
         }
     }
     
-    glium::vertex::VertexBuffer::new(display, &vertex_data).unwrap().into_vertex_buffer_any()
+    arr
+}
+
+fn calculate_z_values(nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>, values: &Vec<f32>) -> Vec<f32> {
+    // calculate node and element area
+    let mut element_area = std::vec::from_elem(0.0f32, elements.len());
+    let mut node_area = std::vec::from_elem(0.0f32, nodes.len());
+    
+    for (i, elem) in elements.iter().enumerate() {
+        element_area[i] = 0.5 * (
+            (nodes[elem[1] as usize][0] - nodes[elem[0] as usize][0]) *
+            (nodes[elem[2] as usize][1] - nodes[elem[0] as usize][1]) -
+            (nodes[elem[2] as usize][0] - nodes[elem[0] as usize][0]) *
+            (nodes[elem[2] as usize][1] - nodes[elem[0] as usize][1])).abs();
+            
+        for n in elem.iter() {
+            node_area[*n as usize] += element_area[i];
+        }
+    }
+    
+    // calculate z values
+    let mut z_values = std::vec::from_elem(0.0f32, nodes.len());
+    for (i, elem) in elements.iter().enumerate() {
+        for n in elem.iter() {
+            z_values[*n as usize] +=
+                values[i] * element_area[i] / node_area[*n as usize];
+        }
+    }
+    
+    z_values
+}
+
+fn calculate_normal(p1: &[f32; 3], p2: &[f32; 3], p3: &[f32; 3]) -> [f32; 3] {
+    let u = [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]]; 
+    let v = [p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]];
+     
+    [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ]
 }
 
 fn main() {
@@ -46,28 +113,83 @@ fn main() {
     use glium::{DisplayBuild, Surface};
     use glium::glutin::{ElementState, MouseButton};
     use glium::glutin::Event::{Closed, MouseInput, MouseMoved};
-    use nalgebra::{PerspMat3, Iso3, Mat3, Vec3, ToHomogeneous, Eye, Rot3};
+    use nalgebra::{PerspMat3, Iso3, Vec3, ToHomogeneous, Rot3};
 
     // make vertex format available to glium
-    implement_vertex!(Vertex, position, normal, color);
+    implement_vertex!(Vertex, position, normal, value);
     
     // create window
     let display = glium::glutin::WindowBuilder::new()
         .with_dimensions(800, 600)
-        .with_title("shadows".to_string())
+        .with_title("mpflow-plotting".to_string())
         .with_vsync()
         .with_multisampling(16)
         .with_depth_buffer(24)
         .build_glium().unwrap();
     
+    // get path of data from command line
+    let path = std::env::args().nth(1).unwrap();
+    
     // generate some shapes
-    let teapot = load_wavefront(&display, include_bytes!("obj/teapot.obj"));
-    let table = glium::vertex::VertexBuffer::new(&display, &[
-        Vertex { position: [-200.0, -50.0,  200.0], normal: [0.0, 1.0, 0.0], color: [0.6, 0.6, 0.6] },
-        Vertex { position: [-200.0, -50.0, -200.0], normal: [0.0, 1.0, 0.0], color: [0.6, 0.6, 0.6] },
-        Vertex { position: [ 200.0, -50.0,  200.0], normal: [0.0, 1.0, 0.0], color: [0.6, 0.6, 0.6] },
-        Vertex { position: [ 200.0, -50.0, -200.0], normal: [0.0, 1.0, 0.0], color: [0.6, 0.6, 0.6] },
-        ]).unwrap();
+    let nodes: Vec<Vec<f32>> = load_file(&format!("{}/mesh/nodes.txt", path));
+    let elements: Vec<Vec<i32>> = load_file(&format!("{}/mesh/elements.txt", path));
+    let image: Vec<Vec<f32>> = load_measurement(&format!("{}/reconstruction.txt", path));
+    let z_values = calculate_z_values(&nodes, &elements,
+        &image.iter().map(|v| v[0]).collect());
+    
+    // create vertex buffer
+    let mesh = {
+        let radius = nodes.iter().fold(0.0f32, |acc, ref item| (item[0] * item[0] + item[1] * item[1]).sqrt().max(acc));
+        let mut vertex_data = Vec::new();
+        for (i, shape) in elements.iter().enumerate() {
+            let triangle = [
+                [nodes[shape[0] as usize][0] / radius, nodes[shape[0] as usize][1] / radius, -z_values[shape[0] as usize]],
+                [nodes[shape[1] as usize][0] / radius, nodes[shape[1] as usize][1] / radius, -z_values[shape[1] as usize]],
+                [nodes[shape[2] as usize][0] / radius, nodes[shape[2] as usize][1] / radius, -z_values[shape[2] as usize]],
+                ];
+             
+            // set front faces
+            let normal = calculate_normal(&triangle[0], &triangle[1], &triangle[2]);
+            for j in 0..3 {
+                if normal[2] <= 0.0 {
+                    vertex_data.push(Vertex {
+                        position: triangle[j],
+                        normal: normal,
+                        value: image[i][0],
+                    });
+                }
+                else {
+                    vertex_data.push(Vertex {
+                        position: triangle[3 - j - 1],
+                        normal: calculate_normal(&triangle[2], &triangle[1], &triangle[0]),
+                        value: image[i][0],
+                    });
+                }
+            }
+            
+            // set back faces
+            for j in 0..3 {
+                if normal[2] <= 0.0 {
+                    vertex_data.push(Vertex {
+                        position: [triangle[3 - j - 1][0], triangle[3 - j - 1][1], triangle[3 - j - 1][2] + 1e-3],
+                        normal: [-normal[0], -normal[1], -normal[2]],
+                        value: image[i][0],
+                    });
+                }
+                else {
+                    let normal = calculate_normal(&triangle[2], &triangle[1], &triangle[0]); 
+                    vertex_data.push(Vertex {
+                        position: [triangle[j][0], triangle[j][1], triangle[j][2] + 1e-3],
+                        normal: [-normal[0], -normal[1], -normal[2]],
+                        value: image[i][0],
+                    });
+                }
+            }
+        }
+        
+        // load data to gpu
+        glium::vertex::VertexBuffer::new(&display, &vertex_data).unwrap()
+    };
         
     // create shadow map
     let shadow_color_texture = glium::texture::Texture2d::empty(&display, 2048, 2048).unwrap();
@@ -83,18 +205,18 @@ fn main() {
         include_str!("shaders/fragment_shadow.glsl"), None).unwrap();
     
     // create draw parameter struct and enable depth testing
-    let mut params = glium::DrawParameters {
+    let params = glium::DrawParameters {
         depth: glium::Depth {
             test: glium::draw_parameters::DepthTest::IfLess,
             write: true,
             .. Default::default()
         },
-        // backface_culling: glium::draw_parameters::BackfaceCullingMode::CullCounterClockWise,
+        backface_culling: glium::draw_parameters::BackfaceCullingMode::CullClockWise,
         .. Default::default()
     };
 
     // position of light source
-    let light_pos = [0.0, 2.0, 2.0f32];
+    let light_pos = [0.0, 2.0, 0.0f32];
     
     // start event loop, exit loop when window closes
     let mut mouse_pressed = false;
@@ -104,34 +226,28 @@ fn main() {
     loop {
         // create model transformation matrix
         let model = Iso3::new(Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous() *
-            (Mat3::new_identity(3) * 0.01).to_homogeneous() *
             (Rot3::new(Vec3::new(2.0 * std::f32::consts::PI * rot_angle.1, 0.0, 0.0))).to_homogeneous() *
-            (Rot3::new(Vec3::new(0.0, 2.0 * std::f32::consts::PI * rot_angle.0, 0.0))).to_homogeneous();
+            (Rot3::new(Vec3::new(0.0, 0.0, -2.0 * std::f32::consts::PI * rot_angle.0))).to_homogeneous();
         
         // rander shadow map
         shadow_buffer.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
 
         let shadow_perspective = PerspMat3::new(1.0, std::f32::consts::PI / 1.5, 0.1, 10.0);
-        let shadow_view = (Rot3::new(Vec3::new(-std::f32::consts::PI / 2.0, 0.0, 0.0))).to_homogeneous() *
+        let shadow_view = (Rot3::new(Vec3::new(-2.0 * std::f32::consts::PI / 4.0, 0.0, 0.0))).to_homogeneous() *
             Iso3::new(-Vec3::new(light_pos[0], light_pos[1], light_pos[2]), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
         let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model }; 
 
-        params.backface_culling = glium::draw_parameters::BackfaceCullingMode::CullClockWise;
-        shadow_buffer.draw(&teapot, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
-            &shadow_program, &shadow_uniforms, &params).unwrap();
-        shadow_buffer.draw(&table, &glium::index::NoIndices(glium::index::PrimitiveType::TriangleStrip),
+        shadow_buffer.draw(&mesh, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
             &shadow_program, &shadow_uniforms, &params).unwrap();
         
         // start drawing on the frame
         let mut target = display.draw();
-        target.clear_color_and_depth((0.0, 0.0, 0.0, 1.0), 1.0);
+        target.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
 
-        // create the perspective matrix
+        // create view and perspective matrix
         let (width, height) = target.get_dimensions();
-        let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 3.0, 0.1, 10.0);
-        
-        // create view matrix
-        let view = Iso3::new(Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
+        let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 6.0, 0.1, 10.0);
+        let view = Iso3::new(Vec3::new(0.0, 0.0, 3.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
 
         // draw shape
         let uniforms = uniform!{ light_pos: light_pos,
@@ -143,10 +259,7 @@ fn main() {
                 .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp),
             };
             
-        params.backface_culling = glium::draw_parameters::BackfaceCullingMode::CullingDisabled;
-        target.draw(&teapot, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList), &program,
-            &uniforms, &params).unwrap();
-        target.draw(&table, &glium::index::NoIndices(glium::index::PrimitiveType::TriangleStrip), &program,
+        target.draw(&mesh, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList), &program,
             &uniforms, &params).unwrap();
             
         // drawing is finished, so swap buffers

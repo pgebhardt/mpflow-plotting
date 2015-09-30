@@ -2,11 +2,11 @@
 
 in vec3 position;
 in vec3 normal;
-in vec3 color;
+in float value;
 
 out vec3 v_normal;
 out vec3 v_position;
-out vec3 v_color;
+out float v_value;
 out vec3 camera_dir;
 out vec4 shadow_position;
 
@@ -23,7 +23,7 @@ const mat4 shadow_bias = mat4(
 	vec4(0.5, 0.5, 0.5, 1.0));
 
 void main() {
-	v_color = color;
+	v_value = value;
 	
 	// position of vertex in clip space
 	gl_Position = perspective * view * model * vec4(position, 1.0);

@@ -1,11 +1,11 @@
 [package]
-name = "shadows"
+name = "mpflow-plotting"
 version = "0.1.0"
 authors = ["Patrik Gebhardt <patrik.gebhardt@rub.de>"]
-include = ["shaders/vertex.glsl", "shaders/fragment.glsl"]
 
 [dependencies]
 nalgebra = "0.2"
 glium = "*"
 genmesh = "*"
 obj = "*"
+num = "*"
