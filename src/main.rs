@@ -64,8 +64,8 @@ fn main() {
     let teapot = load_wavefront(&display, include_bytes!("obj/teapot.obj"));
     let table = glium::vertex::VertexBuffer::new(&display, &[
         Vertex { position: [-200.0, -50.0,  200.0], normal: [0.0, 1.0, 0.0], color: [0.6, 0.6, 0.6] },
-        Vertex { position: [ 200.0, -50.0,  200.0], normal: [0.0, 1.0, 0.0], color: [0.6, 0.6, 0.6] },
         Vertex { position: [-200.0, -50.0, -200.0], normal: [0.0, 1.0, 0.0], color: [0.6, 0.6, 0.6] },
+        Vertex { position: [ 200.0, -50.0,  200.0], normal: [0.0, 1.0, 0.0], color: [0.6, 0.6, 0.6] },
         Vertex { position: [ 200.0, -50.0, -200.0], normal: [0.0, 1.0, 0.0], color: [0.6, 0.6, 0.6] },
         ]).unwrap();
         
@@ -83,7 +83,7 @@ fn main() {
         include_str!("shaders/fragment_shadow.glsl"), None).unwrap();
     
     // create draw parameter struct and enable depth testing
-    let params = glium::DrawParameters {
+    let mut params = glium::DrawParameters {
         depth: glium::Depth {
             test: glium::draw_parameters::DepthTest::IfLess,
             write: true,
@@ -116,6 +116,7 @@ fn main() {
             Iso3::new(-Vec3::new(light_pos[0], light_pos[1], light_pos[2]), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
         let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model }; 
 
+        params.backface_culling = glium::draw_parameters::BackfaceCullingMode::CullClockWise;
         shadow_buffer.draw(&teapot, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
             &shadow_program, &shadow_uniforms, &params).unwrap();
         shadow_buffer.draw(&table, &glium::index::NoIndices(glium::index::PrimitiveType::TriangleStrip),
@@ -142,6 +143,7 @@ fn main() {
                 .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp),
             };
             
+        params.backface_culling = glium::draw_parameters::BackfaceCullingMode::CullingDisabled;
         target.draw(&teapot, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList), &program,
             &uniforms, &params).unwrap();
         target.draw(&table, &glium::index::NoIndices(glium::index::PrimitiveType::TriangleStrip), &program,
