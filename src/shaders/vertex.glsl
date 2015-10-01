@@ -7,7 +7,6 @@ in float value;
 out vec3 v_normal;
 out vec3 v_position;
 out float v_value;
-out vec3 camera_dir;
 out vec4 shadow_position;
 
 uniform mat4 perspective;
@@ -32,11 +31,10 @@ void main() {
 	v_normal = transpose(inverse(mat3(view * model))) * normal;
 	
 	// position of vertex in camera space
-	v_position =  (model * vec4(position, 1.0)).xyz;
+	v_position = (view * model * vec4(position, 1.0)).xyz;
 
 	// direction of vertex to camera in camera space
-	camera_dir = normalize(-(view * model * vec4(position, 1.0)).xyz);
 
-	// position of vertex in shadow space	
+	// position of vertex in shadow space
 	shadow_position = shadow_bias * shadow_perspective * shadow_view * model * vec4(position, 1.0);
 }

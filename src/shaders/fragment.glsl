@@ -3,7 +3,6 @@
 in vec3 v_normal;
 in vec3 v_position;
 in float v_value;
-in vec3 camera_dir;
 in vec4 shadow_position;
 
 out vec4 frag_color;
@@ -12,7 +11,7 @@ uniform vec3 light_pos;
 uniform mat4 view;
 uniform sampler2D shadow_map;
 
-const vec3 specular_color = vec3(1.0, 1.0, 224.0 / 255.0);
+const vec3 specular_color = vec3(1.0, 241.0 / 255.0, 224.0 / 255.0);
 
 vec3 jet_color(float value) {
 	// correct value space
@@ -33,9 +32,12 @@ void main() {
 	// calculate direction to light source
 	vec3 light_dir = normalize(light_pos - v_position);
 
-	// calculate diffuse and specular color components
-	vec3 half_dir = normalize(light_dir + camera_dir);
+	// calculate diffuse color component
 	float diffuse = max(dot(light_dir, normalize(v_normal)), 0.0);
+
+	// calculate specular color components
+	vec3 camera_dir = normalize(-v_position);
+	vec3 half_dir = normalize(light_dir + camera_dir);
 	float specular = diffuse >= 0.0 ? pow(max(dot(half_dir, normalize(v_normal)), 0.0), 16.0) : 0.0;
 	
 	// get visibility from shadow map
