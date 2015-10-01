@@ -6,8 +6,6 @@ in float v_value;
 in vec3 camera_dir;
 in vec4 shadow_position;
 
-out vec4 frag_color;
-
 uniform vec3 light_pos;
 uniform mat4 view;
 uniform sampler2D shadow_map;
@@ -46,6 +44,5 @@ void main() {
 	}
 	
 	// calculate fragment color
-	frag_color = pow(vec4((0.2 + 0.6 * diffuse) * v_color + 0.2 * specular * specular_color, 1.0),
-		vec4(2.2, 2.2, 2.2, 2.2));
+	gl_FragColor = pow(vec4((0.3 + 0.7 * diffuse) * v_color + 0.2 * specular * specular_color, 1.0), vec4(2.2, 2.2, 2.2, 1.0));
 }

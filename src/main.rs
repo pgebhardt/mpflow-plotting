@@ -69,8 +69,8 @@ fn load_measurement(filename: &str) -> Vec<Vec<f32>> {
 
 fn calculate_z_values(nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>, values: &Vec<f32>) -> Vec<f32> {
     // calculate node and element area
-    let mut element_area = std::vec::from_elem(0.0f32, elements.len());
-    let mut node_area = std::vec::from_elem(0.0f32, nodes.len());
+    let mut element_area = vec![0.0f32; elements.len()];
+    let mut node_area = vec![0.0f32; nodes.len()];
     
     for (i, elem) in elements.iter().enumerate() {
         element_area[i] = 0.5 * (
@@ -85,7 +85,7 @@ fn calculate_z_values(nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>, values: &
     }
     
     // calculate z values
-    let mut z_values = std::vec::from_elem(0.0f32, nodes.len());
+    let mut z_values = vec![0.0f32; nodes.len()];
     for (i, elem) in elements.iter().enumerate() {
         for n in elem.iter() {
             z_values[*n as usize] +=
@@ -216,27 +216,26 @@ fn main() {
     };
 
     // position of light source
-    let light_pos = [0.0, 2.0, 0.0f32];
+    let light_pos = [0.0, 2.0, -2.0f32];
     
+    // create transformation matrices to render shadow map from lights point of view
+    let shadow_perspective = PerspMat3::new(1.0, std::f32::consts::PI / 1.5, 0.1, 10.0);
+    let shadow_view = (Rot3::new(Vec3::new(-2.0 * std::f32::consts::PI / 4.0, 0.0, 0.0))).to_homogeneous() *
+        Iso3::new(-Vec3::new(light_pos[0], light_pos[1], light_pos[2]), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
+
     // start event loop, exit loop when window closes
     let mut mouse_pressed = false;
     let mut mouse_pos = (0.0f32, 0.0f32);
     let mut old_mouse_pos = (0.0f32, 0.0f32);
     let mut rot_angle = (0.0f32, 0.0f32);
     loop {
-        // create model transformation matrix
-        let model = Iso3::new(Vec3::new(0.0, 0.0, 2.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous() *
-            (Rot3::new(Vec3::new(2.0 * std::f32::consts::PI * rot_angle.1, 0.0, 0.0))).to_homogeneous() *
+        // rotate model according to mouse rotation
+        let model = (Rot3::new(Vec3::new(2.0 * std::f32::consts::PI * rot_angle.1, 0.0, 0.0))).to_homogeneous() *
             (Rot3::new(Vec3::new(0.0, 0.0, -2.0 * std::f32::consts::PI * rot_angle.0))).to_homogeneous();
         
         // rander shadow map
         shadow_buffer.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
-
-        let shadow_perspective = PerspMat3::new(1.0, std::f32::consts::PI / 1.5, 0.1, 10.0);
-        let shadow_view = (Rot3::new(Vec3::new(-2.0 * std::f32::consts::PI / 4.0, 0.0, 0.0))).to_homogeneous() *
-            Iso3::new(-Vec3::new(light_pos[0], light_pos[1], light_pos[2]), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
         let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model }; 
-
         shadow_buffer.draw(&mesh, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
             &shadow_program, &shadow_uniforms, &params).unwrap();
         
@@ -247,7 +246,7 @@ fn main() {
         // create view and perspective matrix
         let (width, height) = target.get_dimensions();
         let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 6.0, 0.1, 10.0);
-        let view = Iso3::new(Vec3::new(0.0, 0.0, 3.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
+        let view = Iso3::new(Vec3::new(0.0, 0.0, 5.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
 
         // draw shape
         let uniforms = uniform!{ light_pos: light_pos,
