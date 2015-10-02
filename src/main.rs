@@ -16,26 +16,28 @@ struct Vertex {
     value: f32,
 }
 
-fn load_file<T: FromStr>(filename: &str) -> Vec<Vec<T>> {
+fn load_file<T: FromStr>(filename: &str) -> std::io::Result<Vec<Vec<T>>> {
     // open file
-    let f = BufReader::new(File::open(filename).unwrap());
-
+    let file = try!(File::open(filename));
+    
     // read something
-    let arr: Vec<Vec<T>> = f.lines()
+    let reader = BufReader::new(file);
+    let arr: Vec<Vec<T>> = reader.lines()
         .map(|l| l.unwrap().split(char::is_whitespace)
             .map(|number| number.parse().ok().unwrap())
             .collect())
         .collect();
 
-    arr
+    Ok(arr)
 }
 
-fn load_measurement(filename: &str) -> Vec<Vec<f32>> {
+fn load_measurement(filename: &str) -> std::io::Result<Vec<Vec<f32>>> {
     // open file
-    let f = BufReader::new(File::open(filename).unwrap());
+    let file = try!(File::open(filename));
 
     // read something
-    let mut arr: Vec<Vec<f32>> = f.lines()
+    let reader = BufReader::new(file);
+    let mut arr: Vec<Vec<f32>> = reader.lines()
         .map(|l| {
             let line = l.unwrap();
 
@@ -64,7 +66,7 @@ fn load_measurement(filename: &str) -> Vec<Vec<f32>> {
         }
     }
 
-    arr
+    Ok(arr)
 }
 
 fn calculate_z_values(nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>, values: &Vec<f32>) -> Vec<f32> {
@@ -130,12 +132,20 @@ fn main() {
     // get path of data from command line
     let path = std::env::args().nth(1).unwrap();
 
+    // load mesh from files
+    let nodes: Vec<Vec<f32>> = load_file(&format!("{}/mesh/nodes.txt", path))
+        .ok().expect("Cannot open mesh nodes file!");
+    let elements: Vec<Vec<i32>> = load_file(&format!("{}/mesh/elements.txt", path))
+        .ok().expect("Cannot open mesh elements file!");
+
+    // check correct shape
+    assert_eq!(elements.iter().map(|row| row.iter().fold(0, |acc, item| std::cmp::max(acc, *item))).max(), Some(nodes.len() as i32 - 1));
+    
     // generate mesh
     let mesh = {
         // load mesh and reconstruction from file
-        let nodes: Vec<Vec<f32>> = load_file(&format!("{}/mesh/nodes.txt", path));
-        let elements: Vec<Vec<i32>> = load_file(&format!("{}/mesh/elements.txt", path));
         let reconstruction: Vec<f32> = load_measurement(&format!("{}/reconstruction.txt", path))
+            .ok().expect("Cannot load reconstruction from file!")
             .iter().map(|v| v[0]).collect();
 
         // create interpolated z values
@@ -151,7 +161,7 @@ fn main() {
                 [nodes[shape[0] as usize][0] / radius, nodes[shape[0] as usize][1] / radius, -z_values[shape[0] as usize]],
                 [nodes[shape[1] as usize][0] / radius, nodes[shape[1] as usize][1] / radius, -z_values[shape[1] as usize]],
                 [nodes[shape[2] as usize][0] / radius, nodes[shape[2] as usize][1] / radius, -z_values[shape[2] as usize]],
-                ];
+            ];
 
             // set front faces
             let normal = calculate_normal(&triangle[0], &triangle[1], &triangle[2]);
@@ -194,7 +204,7 @@ fn main() {
         // load data to gpu
         glium::vertex::VertexBuffer::new(&display, &vertex_data).unwrap()
     };
-
+        
     // create shadow map
     let shadow_color_texture = glium::texture::Texture2d::empty(&display, 2048, 2048).unwrap();
     let shadow_texture = glium::texture::DepthTexture2d::empty_with_format(&display,
@@ -233,11 +243,47 @@ fn main() {
     let mut old_mouse_pos = (0.0f32, 0.0f32);
     let mut rot_angle = (0.0f32, 0.0f32);
     loop {
-        // listen to the events produced by the window
-        for ev in display.wait_events() {
-            // get current dimensions of main framebuffer
-            let (width, height) = display.get_framebuffer_dimensions();
+        // get current dimensions of main framebuffer
+        let (width, height) = display.get_framebuffer_dimensions();
 
+        // rotate model according to mouse rotation
+        let model = Iso3::new(Vec3::new(0.0, 0.0, 5.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous() *
+            (Rot3::new(Vec3::new(2.0 * std::f32::consts::PI * rot_angle.1, 0.0, 0.0))).to_homogeneous() *
+            (Rot3::new(Vec3::new(0.0, 0.0, -2.0 * std::f32::consts::PI * rot_angle.0))).to_homogeneous();
+
+        // rander shadow map
+        shadow_buffer.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
+
+        let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model }; 
+        shadow_buffer.draw(&mesh, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
+            &shadow_program, &shadow_uniforms, &params).unwrap();
+
+        // start drawing on the frame
+        let mut target = display.draw();
+        target.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
+
+        // create view and perspective matrix
+        let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 6.0, 0.1, 10.0);
+        let view = Iso3::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
+
+        // draw shape
+        let uniforms = uniform!{ light_pos: light_pos,
+            perspective: perspective, view: view, model: model,
+            shadow_perspective: shadow_perspective, shadow_view: shadow_view,
+            shadow_map: shadow_texture.sampled()
+                .minify_filter(glium::uniforms::MinifySamplerFilter::Linear)
+                .magnify_filter(glium::uniforms::MagnifySamplerFilter::Linear)
+                .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp),
+            };
+
+        target.draw(&mesh, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList), &program,
+            &uniforms, &params).unwrap();
+
+        // drawing is finished, so swap buffers
+        target.finish().unwrap();
+            
+        // listen to the events produced by the window
+        for ev in display.poll_events() {
             // process event
             match ev {
                 Closed => return,
@@ -259,42 +305,6 @@ fn main() {
                 },
                 _ => ()
             }
-
-            // rotate model according to mouse rotation
-            let model = Iso3::new(Vec3::new(0.0, 0.0, 5.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous() *
-                (Rot3::new(Vec3::new(2.0 * std::f32::consts::PI * rot_angle.1, 0.0, 0.0))).to_homogeneous() *
-                (Rot3::new(Vec3::new(0.0, 0.0, -2.0 * std::f32::consts::PI * rot_angle.0))).to_homogeneous();
-
-            // rander shadow map
-            shadow_buffer.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
-
-            let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model }; 
-            shadow_buffer.draw(&mesh, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
-                &shadow_program, &shadow_uniforms, &params).unwrap();
-
-            // start drawing on the frame
-            let mut target = display.draw();
-            target.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
-
-            // create view and perspective matrix
-            let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 6.0, 0.1, 10.0);
-            let view = Iso3::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
-
-            // draw shape
-            let uniforms = uniform!{ light_pos: light_pos,
-                perspective: perspective, view: view, model: model,
-                shadow_perspective: shadow_perspective, shadow_view: shadow_view,
-                shadow_map: shadow_texture.sampled()
-                    .minify_filter(glium::uniforms::MinifySamplerFilter::Linear)
-                    .magnify_filter(glium::uniforms::MagnifySamplerFilter::Linear)
-                    .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp),
-                };
-
-            target.draw(&mesh, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList), &program,
-                &uniforms, &params).unwrap();
-
-            // drawing is finished, so swap buffers
-            target.finish().unwrap();
         }
     }
 }
