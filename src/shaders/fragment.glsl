@@ -41,7 +41,7 @@ void main() {
 	float specular = diffuse >= 0.0 ? pow(max(dot(half_dir, normalize(v_normal)), 0.0), 16.0) : 0.0;
 	
 	// get visibility from shadow map
-	float bias = 1e-4 * clamp(tan(acos(clamp(dot(normalize(v_normal), light_dir), 0.0, 1.0))), 0.0, 4.0);
+	float bias = 1e-4 * clamp(tan(acos(clamp(dot(normalize(v_normal), light_dir), 0.0, 1.0))), 0.0, 2.0);
 	if (texture(shadow_map, shadow_position.xy / shadow_position.w).r < (shadow_position.z - bias) / shadow_position.w) {
 		diffuse *= 0.5;
 		specular = 0.0;

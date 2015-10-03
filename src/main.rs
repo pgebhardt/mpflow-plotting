@@ -19,7 +19,7 @@ struct Vertex {
 fn load_file<T: FromStr>(filename: &str) -> std::io::Result<Vec<Vec<T>>> {
     // open file
     let file = try!(File::open(filename));
-    
+
     // read something
     let reader = BufReader::new(file);
     let arr: Vec<Vec<T>> = reader.lines()
@@ -37,18 +37,16 @@ fn load_measurement(filename: &str) -> std::io::Result<Vec<Vec<f32>>> {
 
     // read something
     let reader = BufReader::new(file);
-    let mut arr: Vec<Vec<f32>> = reader.lines()
-        .map(|l| {
-            let line = l.unwrap();
+    let mut arr: Vec<Vec<f32>> = reader.lines().map(|l| {
+        let line = l.unwrap();
 
-            if &line[0..1] == "(" {
-                return (&line[1..line.len()-1]).to_string().split(',').map(|number| number.parse().ok().unwrap()).collect(); 
-            }
-            else {
-                return vec![line.parse().ok().unwrap()];
-            }
-        })
-        .collect();
+        if &line[0..1] == "(" {
+            return (&line[1..line.len()-1]).to_string().split(',').map(|number| number.parse().ok().unwrap()).collect(); 
+        }
+        else {
+            return vec![line.parse().ok().unwrap()];
+        }
+    }).collect();
 
     // correct real part
     let norm_real = (-arr.iter().fold(0.0f32, |acc, ref item| acc.min(item[0] - 1.0)))
@@ -70,23 +68,22 @@ fn load_measurement(filename: &str) -> std::io::Result<Vec<Vec<f32>>> {
 }
 
 fn calculate_z_values(nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>, values: &Vec<f32>) -> Vec<f32> {
-    // calculate node and element area
-    let mut element_area = vec![0.0f32; elements.len()];
+    // interpolate z values of nodes by using the area and value of each element
+    // and norm it to the area of all elements the node is part of
+    let element_area: Vec<_> = elements.iter().map(|e| {
+        ((nodes[e[1] as usize][0] - nodes[e[0] as usize][0]) *
+        (nodes[e[2] as usize][1] - nodes[e[0] as usize][1]) -
+        (nodes[e[2] as usize][0] - nodes[e[0] as usize][0]) *
+        (nodes[e[1] as usize][1] - nodes[e[0] as usize][1])).abs() * 0.5
+    }).collect();
+
     let mut node_area = vec![0.0f32; nodes.len()];
-
     for (i, elem) in elements.iter().enumerate() {
-        element_area[i] = 0.5 * (
-            (nodes[elem[1] as usize][0] - nodes[elem[0] as usize][0]) *
-            (nodes[elem[2] as usize][1] - nodes[elem[0] as usize][1]) -
-            (nodes[elem[2] as usize][0] - nodes[elem[0] as usize][0]) *
-            (nodes[elem[1] as usize][1] - nodes[elem[0] as usize][1])).abs();
-
         for n in elem.iter() {
             node_area[*n as usize] += element_area[i];
         }
     }
 
-    // calculate z values
     let mut z_values = vec![0.0f32; nodes.len()];
     for (i, elem) in elements.iter().enumerate() {
         for n in elem.iter() {
@@ -98,15 +95,61 @@ fn calculate_z_values(nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>, values: &
     z_values
 }
 
-fn calculate_normal(p1: &[f32; 3], p2: &[f32; 3], p3: &[f32; 3]) -> [f32; 3] {
-    let u = [p2[0] - p1[0], p2[1] - p1[1], p2[2] - p1[2]];
-    let v = [p3[0] - p1[0], p3[1] - p1[1], p3[2] - p1[2]];
+fn calculate_normal(p1: &nalgebra::Vec3<f32>, p2: &nalgebra::Vec3<f32>, p3: &nalgebra::Vec3<f32>) -> nalgebra::Vec3<f32> {
+    let u = *p2 - *p1;
+    let v = *p3 - *p1;
 
-    [
-        u[1] * v[2] - u[2] * v[1],
-        u[2] * v[0] - u[0] * v[2],
-        u[0] * v[1] - u[1] * v[0],
-    ]
+    nalgebra::Vec3::new(
+        u.y * v.z - u.z * v.y,
+        u.z * v.x - u.x * v.z,
+        u.x * v.y - u.y * v.x,
+    )
+}
+
+fn assemble_model<F>(facade: &F, nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>,
+    reconstruction: &Vec<f32>, face_up: bool) -> glium::VertexBuffer<Vertex>
+    where F: glium::backend::Facade {
+    use nalgebra::{Vec3, Norm};
+
+    // create interpolated z values
+    let z_values = calculate_z_values(nodes, elements, reconstruction);
+
+    // calculate radius of mesh to scale each vertex to unit size
+    let radius = nodes.iter().fold(0.0f32, |acc, item| (item[0] * item[0] + item[1] * item[1]).sqrt().max(acc));
+
+    // create vertex array
+    let vertex_data: Vec<_> = elements.iter().zip(reconstruction).flat_map(|(indices, &value)| {
+        // extract coordinates of triangle
+        let triangle: Vec<_> = indices.iter().map(|&index| {
+            Vec3::new(nodes[index as usize][0] / radius, nodes[index as usize][1] / radius, -z_values[index as usize])
+        }).collect();
+
+        // calculate normal of the triangle
+        let normal = calculate_normal(&triangle[0], &triangle[1], &triangle[2]).normalize();
+
+        // set vertices
+        if normal.z <= 0.0 && face_up || normal.z > 0.0 && !face_up {
+            triangle.iter().map(|&node|
+                Vertex {
+                    position: *node.as_array(),
+                    normal: *normal.as_array(),
+                    value: value,
+                }
+            ).collect::<Vec<_>>()
+        }
+        else {
+            triangle.iter().rev().map(|&node|
+                Vertex {
+                    position: *node.as_array(),
+                    normal: *(-normal).as_array(),
+                    value: value,
+                }
+            ).collect::<Vec<_>>()
+        }
+    }).collect();
+
+    // load data to gpu
+    glium::vertex::VertexBuffer::new(facade, &vertex_data).unwrap()
 }
 
 fn main() {
@@ -138,73 +181,15 @@ fn main() {
     let elements: Vec<Vec<i32>> = load_file(&format!("{}/mesh/elements.txt", path))
         .ok().expect("Cannot open mesh elements file!");
 
-    // check correct shape
-    assert_eq!(elements.iter().map(|row| row.iter().fold(0, |acc, item| std::cmp::max(acc, *item))).max(), Some(nodes.len() as i32 - 1));
-    
+    // load mesh and reconstruction from file
+    let reconstruction: Vec<f32> = load_measurement(&format!("{}/reconstruction.txt", path))
+        .ok().expect("Cannot load reconstruction from file!")
+        .iter().map(|v| v[0]).collect();
+
     // generate mesh
-    let mesh = {
-        // load mesh and reconstruction from file
-        let reconstruction: Vec<f32> = load_measurement(&format!("{}/reconstruction.txt", path))
-            .ok().expect("Cannot load reconstruction from file!")
-            .iter().map(|v| v[0]).collect();
+    let front_faces = assemble_model(&display, &nodes, &elements, &reconstruction, true);
+    let back_faces = assemble_model(&display, &nodes, &elements, &reconstruction, false);
 
-        // create interpolated z values
-        let z_values = calculate_z_values(&nodes, &elements, &reconstruction);
-
-        // calculate radius of mesh to scale each vertex to unit size
-        let radius = nodes.iter().fold(0.0f32, |acc, item| (item[0] * item[0] + item[1] * item[1]).sqrt().max(acc));
-
-        // fill vertex buffer
-        let mut vertex_data = Vec::new();
-        for (i, shape) in elements.iter().enumerate() {
-            let triangle = [
-                [nodes[shape[0] as usize][0] / radius, nodes[shape[0] as usize][1] / radius, -z_values[shape[0] as usize]],
-                [nodes[shape[1] as usize][0] / radius, nodes[shape[1] as usize][1] / radius, -z_values[shape[1] as usize]],
-                [nodes[shape[2] as usize][0] / radius, nodes[shape[2] as usize][1] / radius, -z_values[shape[2] as usize]],
-            ];
-
-            // set front faces
-            let normal = calculate_normal(&triangle[0], &triangle[1], &triangle[2]);
-            for j in 0..3 {
-                if normal[2] <= 0.0 {
-                    vertex_data.push(Vertex {
-                        position: triangle[j],
-                        normal: normal,
-                        value: reconstruction[i],
-                    });
-                }
-                else {
-                    vertex_data.push(Vertex {
-                        position: triangle[3 - j - 1],
-                        normal: [-normal[0], -normal[1], -normal[2]],
-                        value: reconstruction[i],
-                    });
-                }
-            }
-
-            // set back faces
-            for j in 0..3 {
-                if normal[2] <= 0.0 {
-                    vertex_data.push(Vertex {
-                        position: triangle[3 - j - 1],
-                        normal: [-normal[0], -normal[1], -normal[2]],
-                        value: reconstruction[i],
-                    });
-                }
-                else {
-                    vertex_data.push(Vertex {
-                        position: triangle[j],
-                        normal: normal,
-                        value: reconstruction[i],
-                    });
-                }
-            }
-        }
-
-        // load data to gpu
-        glium::vertex::VertexBuffer::new(&display, &vertex_data).unwrap()
-    };
-        
     // create shadow map
     let shadow_color_texture = glium::texture::Texture2d::empty(&display, 2048, 2048).unwrap();
     let shadow_texture = glium::texture::DepthTexture2d::empty_with_format(&display,
@@ -255,7 +240,9 @@ fn main() {
         shadow_buffer.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
 
         let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model }; 
-        shadow_buffer.draw(&mesh, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
+        shadow_buffer.draw(&front_faces, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
+            &shadow_program, &shadow_uniforms, &params).unwrap();
+        shadow_buffer.draw(&back_faces, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
             &shadow_program, &shadow_uniforms, &params).unwrap();
 
         // start drawing on the frame
@@ -276,12 +263,14 @@ fn main() {
                 .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp),
             };
 
-        target.draw(&mesh, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList), &program,
+        target.draw(&front_faces, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList), &program,
+            &uniforms, &params).unwrap();
+        target.draw(&back_faces, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList), &program,
             &uniforms, &params).unwrap();
 
         // drawing is finished, so swap buffers
         target.finish().unwrap();
-            
+
         // listen to the events produced by the window
         for ev in display.poll_events() {
             // process event

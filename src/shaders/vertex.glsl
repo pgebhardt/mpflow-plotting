@@ -22,7 +22,7 @@ const mat4 shadow_bias = mat4(
 	vec4(0.5, 0.5, 0.5, 1.0));
 
 void main() {
-	// v_value = value;
+	v_value = value;
 	
 	// position of vertex in clip space
 	gl_Position = perspective * view * model * vec4(position, 1.0);
