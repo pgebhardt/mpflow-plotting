@@ -231,15 +231,29 @@ fn main() {
         // get current dimensions of main framebuffer
         let (width, height) = display.get_framebuffer_dimensions();
 
+        // create view and perspective matrix
+        let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 6.0, 0.1, 10.0);
+        let view = Iso3::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
+
         // rotate model according to mouse rotation
         let model = Iso3::new(Vec3::new(0.0, 0.0, 5.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous() *
             (Rot3::new(Vec3::new(2.0 * std::f32::consts::PI * rot_angle.1, 0.0, 0.0))).to_homogeneous() *
             (Rot3::new(Vec3::new(0.0, 0.0, -2.0 * std::f32::consts::PI * rot_angle.0))).to_homogeneous();
 
-        // rander shadow map
+        // create uniforms
+        let uniforms = uniform!{ light_pos: light_pos,
+            perspective: perspective, view: view, model: model,
+            shadow_perspective: shadow_perspective, shadow_view: shadow_view,
+            shadow_map: shadow_texture.sampled()
+                .minify_filter(glium::uniforms::MinifySamplerFilter::Linear)
+                .magnify_filter(glium::uniforms::MagnifySamplerFilter::Linear)
+                .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp),
+            };
+        let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model }; 
+
+        // render shadow map
         shadow_buffer.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
 
-        let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model }; 
         shadow_buffer.draw(&front_faces, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
             &shadow_program, &shadow_uniforms, &params).unwrap();
         shadow_buffer.draw(&back_faces, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
@@ -249,20 +263,7 @@ fn main() {
         let mut target = display.draw();
         target.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
 
-        // create view and perspective matrix
-        let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 6.0, 0.1, 10.0);
-        let view = Iso3::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
-
-        // draw shape
-        let uniforms = uniform!{ light_pos: light_pos,
-            perspective: perspective, view: view, model: model,
-            shadow_perspective: shadow_perspective, shadow_view: shadow_view,
-            shadow_map: shadow_texture.sampled()
-                .minify_filter(glium::uniforms::MinifySamplerFilter::Linear)
-                .magnify_filter(glium::uniforms::MagnifySamplerFilter::Linear)
-                .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp),
-            };
-
+        // draw mesh
         target.draw(&front_faces, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList), &program,
             &uniforms, &params).unwrap();
         target.draw(&back_faces, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList), &program,
