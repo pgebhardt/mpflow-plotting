@@ -3,153 +3,28 @@ extern crate glium;
 extern crate nalgebra;
 extern crate num;
 
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::str::FromStr;
-use num::traits::Float;
+mod numpy_compat;
+mod mesh;
 
-// vertex format
-#[derive(Copy, Clone)]
-struct Vertex {
-    position: [f32; 3],
-    normal: [f32; 3],
-    value: f32,
-}
+use numpy_compat::{load_txt, load_complex};
+use num::complex::Complex;
 
-fn load_file<T: FromStr>(filename: &str) -> std::io::Result<Vec<Vec<T>>> {
-    // open file
-    let file = try!(File::open(filename));
+fn load_measuerement(filename: &str) -> std::io::Result<Vec<Complex<f32>>> {
+    // load only the first column of reconstruction from file
+    let array: Vec<_> = try!(load_complex(filename)).iter()
+        .map(|row| row[0]).collect();
 
-    // read something
-    let reader = BufReader::new(file);
-    let arr: Vec<Vec<T>> = reader.lines()
-        .map(|l| l.unwrap().split(char::is_whitespace)
-            .map(|number| number.parse().ok().unwrap())
-            .collect())
-        .collect();
+    // calculate norms for real and imaginary parts
+    let norm_real = (-array.iter().fold(0.0f32, |acc, val| acc.min(val.re - 1.0)))
+        .max(array.iter().fold(0.0f32, |acc, val| acc.max(val.re - 1.0)));
+    let norm_imag = (-array.iter().fold(0.0f32, |acc, val| acc.min(val.im)))
+        .max(array.iter().fold(0.0f32, |acc, val| acc.max(val.im)));
 
-    Ok(arr)
-}
-
-fn load_measurement(filename: &str) -> std::io::Result<Vec<Vec<f32>>> {
-    // open file
-    let file = try!(File::open(filename));
-
-    // read something
-    let reader = BufReader::new(file);
-    let mut arr: Vec<Vec<f32>> = reader.lines().map(|l| {
-        let line = l.unwrap();
-
-        if &line[0..1] == "(" {
-            return (&line[1..line.len()-1]).to_string().split(',').map(|number| number.parse().ok().unwrap()).collect(); 
-        }
-        else {
-            return vec![line.parse().ok().unwrap()];
-        }
-    }).collect();
-
-    // correct real part
-    let norm_real = (-arr.iter().fold(0.0f32, |acc, ref item| acc.min(item[0] - 1.0)))
-        .max(arr.iter().fold(0.0f32, |acc, ref item| acc.max(item[0] - 1.0)));
-    for v in arr.iter_mut() {
-        v[0] = (v[0] - 1.0) / norm_real;
-    }
-
-    // correct imaginary part
-    if arr[0].len() > 1 {
-        let norm_imag = (-arr.iter().fold(0.0f32, |acc, ref item| acc.min(item[1])))
-            .max(arr.iter().fold(0.0f32, |acc, ref item| acc.max(item[1])));
-        for v in arr.iter_mut() {
-            v[1] = v[1] / norm_imag;
-        }
-    }
-
-    Ok(arr)
-}
-
-fn calculate_z_values(nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>, values: &Vec<f32>) -> Vec<f32> {
-    // interpolate z values of nodes by using the area and value of each element
-    // and norm it to the area of all elements the node is part of
-    let element_area: Vec<_> = elements.iter().map(|e| {
-        ((nodes[e[1] as usize][0] - nodes[e[0] as usize][0]) *
-        (nodes[e[2] as usize][1] - nodes[e[0] as usize][1]) -
-        (nodes[e[2] as usize][0] - nodes[e[0] as usize][0]) *
-        (nodes[e[1] as usize][1] - nodes[e[0] as usize][1])).abs() * 0.5
-    }).collect();
-
-    let mut node_area = vec![0.0f32; nodes.len()];
-    for (i, elem) in elements.iter().enumerate() {
-        for n in elem.iter() {
-            node_area[*n as usize] += element_area[i];
-        }
-    }
-
-    let mut z_values = vec![0.0f32; nodes.len()];
-    for (i, elem) in elements.iter().enumerate() {
-        for n in elem.iter() {
-            z_values[*n as usize] +=
-                values[i] * element_area[i] / node_area[*n as usize];
-        }
-    }
-
-    z_values
-}
-
-fn calculate_normal(p1: &nalgebra::Vec3<f32>, p2: &nalgebra::Vec3<f32>, p3: &nalgebra::Vec3<f32>) -> nalgebra::Vec3<f32> {
-    let u = *p2 - *p1;
-    let v = *p3 - *p1;
-
-    nalgebra::Vec3::new(
-        u.y * v.z - u.z * v.y,
-        u.z * v.x - u.x * v.z,
-        u.x * v.y - u.y * v.x,
-    )
-}
-
-fn assemble_model<F>(facade: &F, nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>,
-    reconstruction: &Vec<f32>, face_up: bool) -> glium::VertexBuffer<Vertex>
-    where F: glium::backend::Facade {
-    use nalgebra::{Vec3, Norm};
-
-    // create interpolated z values
-    let z_values = calculate_z_values(nodes, elements, reconstruction);
-
-    // calculate radius of mesh to scale each vertex to unit size
-    let radius = nodes.iter().fold(0.0f32, |acc, item| (item[0] * item[0] + item[1] * item[1]).sqrt().max(acc));
-
-    // create vertex array
-    let vertex_data: Vec<_> = elements.iter().zip(reconstruction).flat_map(|(indices, &value)| {
-        // extract coordinates of triangle
-        let triangle: Vec<_> = indices.iter().map(|&index| {
-            Vec3::new(nodes[index as usize][0] / radius, nodes[index as usize][1] / radius, -z_values[index as usize])
-        }).collect();
-
-        // calculate normal of the triangle
-        let normal = calculate_normal(&triangle[0], &triangle[1], &triangle[2]).normalize();
-
-        // set vertices
-        if normal.z <= 0.0 && face_up || normal.z > 0.0 && !face_up {
-            triangle.iter().map(|&node|
-                Vertex {
-                    position: *node.as_array(),
-                    normal: *normal.as_array(),
-                    value: value,
-                }
-            ).collect::<Vec<_>>()
-        }
-        else {
-            triangle.iter().rev().map(|&node|
-                Vertex {
-                    position: *node.as_array(),
-                    normal: *(-normal).as_array(),
-                    value: value,
-                }
-            ).collect::<Vec<_>>()
-        }
-    }).collect();
-
-    // load data to gpu
-    glium::vertex::VertexBuffer::new(facade, &vertex_data).unwrap()
+    // norm values and substract reference value from real part
+    Ok(array.iter().map(|val| {
+        Complex::new((val.re - 1.0) / norm_real,
+            val.im / norm_imag)
+    }).collect::<Vec<_>>())
 }
 
 fn main() {
@@ -159,9 +34,6 @@ fn main() {
     use glium::glutin::{ElementState, MouseButton};
     use glium::glutin::Event::{Closed, MouseInput, MouseMoved};
     use nalgebra::{PerspMat3, Iso3, Vec3, ToHomogeneous, Rot3};
-
-    // make vertex format available to glium
-    implement_vertex!(Vertex, position, normal, value);
 
     // create window
     let display = glium::glutin::WindowBuilder::new()
@@ -176,19 +48,19 @@ fn main() {
     let path = std::env::args().nth(1).unwrap();
 
     // load mesh from files
-    let nodes: Vec<Vec<f32>> = load_file(&format!("{}/mesh/nodes.txt", path))
+    let nodes: Vec<Vec<f32>> = load_txt(&format!("{}/mesh/nodes.txt", path))
         .ok().expect("Cannot open mesh nodes file!");
-    let elements: Vec<Vec<i32>> = load_file(&format!("{}/mesh/elements.txt", path))
+    let elements: Vec<Vec<i32>> = load_txt(&format!("{}/mesh/elements.txt", path))
         .ok().expect("Cannot open mesh elements file!");
 
     // load mesh and reconstruction from file
-    let reconstruction: Vec<f32> = load_measurement(&format!("{}/reconstruction.txt", path))
+    let reconstruction: Vec<f32> = load_measuerement(&format!("{}/reconstruction.txt", path))
         .ok().expect("Cannot load reconstruction from file!")
-        .iter().map(|v| v[0]).collect();
+        .iter().map(|v| v.re).collect();
 
     // generate mesh
-    let front_faces = assemble_model(&display, &nodes, &elements, &reconstruction, true);
-    let back_faces = assemble_model(&display, &nodes, &elements, &reconstruction, false);
+    let front_faces = mesh::generate_mesh(&display, &nodes, &elements, &reconstruction, true);
+    let back_faces = mesh::generate_mesh(&display, &nodes, &elements, &reconstruction, false);
 
     // create shadow map
     let shadow_color_texture = glium::texture::Texture2d::empty(&display, 2048, 2048).unwrap();
