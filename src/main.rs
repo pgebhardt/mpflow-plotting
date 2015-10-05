@@ -72,10 +72,10 @@ fn main() {
         &shadow_color_texture, &shadow_texture).unwrap();
 
     // create glium program
-    let program = glium::Program::from_source(&display, include_str!("shaders/vertex.glsl"),
-        include_str!("shaders/fragment.glsl"), None).unwrap();
-    let shadow_program = glium::Program::from_source(&display, include_str!("shaders/vertex_shadow.glsl"),
-        include_str!("shaders/fragment_shadow.glsl"), None).unwrap();
+    let program = glium::Program::from_source(&display, include_str!("shaders/full/vertex.glsl"),
+        include_str!("shaders/full/fragment.glsl"), None).unwrap();
+    let shadow_program = glium::Program::from_source(&display, include_str!("shaders/shadow/vertex.glsl"),
+        include_str!("shaders/shadow/fragment.glsl"), None).unwrap();
 
     // create draw parameter struct and enable depth testing
     let params = glium::DrawParameters {
