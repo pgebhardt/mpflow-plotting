@@ -1,6 +1,8 @@
 extern crate glium;
 extern crate nalgebra;
 
+use nalgebra::{Vec3, Norm};
+
 // vertex format
 #[derive(Copy, Clone)]
 pub struct Vertex {
@@ -13,7 +15,6 @@ implement_vertex!(Vertex, position, normal, value);
 pub fn generate_mesh<F>(facade: &F, nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>,
     reconstruction: &Vec<f32>, face_up: bool) -> glium::VertexBuffer<Vertex>
     where F: glium::backend::Facade {
-    use nalgebra::{Vec3, Norm};
 
     // create interpolated z values
     let z_values = calculate_z_values(nodes, elements, reconstruction);
@@ -84,11 +85,11 @@ fn calculate_z_values(nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>, values: &
     z_values
 }
 
-fn calculate_normal(p1: &nalgebra::Vec3<f32>, p2: &nalgebra::Vec3<f32>, p3: &nalgebra::Vec3<f32>) -> nalgebra::Vec3<f32> {
+fn calculate_normal(p1: &Vec3<f32>, p2: &Vec3<f32>, p3: &Vec3<f32>) -> Vec3<f32> {
     let u = *p2 - *p1;
     let v = *p3 - *p1;
 
-    nalgebra::Vec3::new(
+    Vec3::new(
         u.y * v.z - u.z * v.y,
         u.z * v.x - u.x * v.z,
         u.x * v.y - u.y * v.x,

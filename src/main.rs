@@ -8,6 +8,7 @@ mod mesh;
 
 use numpy_compat::{load_txt, load_complex};
 use num::complex::Complex;
+use num::traits::Zero;
 
 fn load_measuerement(filename: &str) -> std::io::Result<Vec<Complex<f32>>> {
     // load only the first column of reconstruction from file
@@ -33,7 +34,7 @@ fn main() {
     use glium::{DisplayBuild, Surface};
     use glium::glutin::{ElementState, MouseButton};
     use glium::glutin::Event::{Closed, MouseInput, MouseMoved};
-    use nalgebra::{PerspMat3, Iso3, Vec3, ToHomogeneous, Rot3};
+    use nalgebra::{PerspMat3, Iso3, Vec3, Vec2, ToHomogeneous, Rot3};
 
     // create window
     let display = glium::glutin::WindowBuilder::new()
@@ -45,7 +46,8 @@ fn main() {
         .build_glium().unwrap();
 
     // get path of data from command line
-    let path = std::env::args().nth(1).unwrap();
+    let path = std::env::args().nth(1)
+        .expect("You have to give the path to a model");
 
     // load mesh from files
     let nodes: Vec<Vec<f32>> = load_txt(&format!("{}/mesh/nodes.txt", path))
@@ -87,39 +89,36 @@ fn main() {
     };
 
     // position of light source
-    let light_pos = [0.0, 2.0, 3.0f32];
+    let light_pos = Vec3::new(0.0f32, 2.0, 3.0);
 
     // create transformation matrices to render shadow map from lights point of view
     let shadow_perspective = PerspMat3::new(1.0, std::f32::consts::PI / 3.0, 0.1, 10.0);
-    let shadow_view = (Rot3::new(Vec3::new(-std::f32::consts::PI / 4.0, 0.0, 0.0))).to_homogeneous() *
-        Iso3::new(-Vec3::new(light_pos[0], light_pos[1], light_pos[2]), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
+    let shadow_view = (Rot3::new(Vec3::x() * -std::f32::consts::PI / 4.0)).to_homogeneous() *
+        Iso3::new(-light_pos, Vec3::zero()).to_homogeneous();
 
     // start event loop, exit loop when window closes
     let mut mouse_pressed = false;
-    let mut mouse_pos = (0.0f32, 0.0f32);
-    let mut old_mouse_pos = (0.0f32, 0.0f32);
-    let mut rot_angle = (0.0f32, 0.0f32);
+    let mut mouse_pos = Vec2::new(0.0f32, 0.0);
+    let mut old_mouse_pos = Vec2::new(0.0f32, 0.0);
+    let mut mouse_movement = Vec2::new(0.0f32, 0.0);
     loop {
         // get current dimensions of main framebuffer
         let (width, height) = display.get_framebuffer_dimensions();
 
         // create view and perspective matrix
         let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 6.0, 0.1, 10.0);
-        let view = Iso3::new(Vec3::new(0.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous();
+        let view = Iso3::new(Vec3::zero(), Vec3::zero()).to_homogeneous();
 
         // rotate model according to mouse rotation
-        let model = Iso3::new(Vec3::new(0.0, 0.0, 5.0), Vec3::new(0.0, 0.0, 0.0)).to_homogeneous() *
-            (Rot3::new(Vec3::new(2.0 * std::f32::consts::PI * rot_angle.1, 0.0, 0.0))).to_homogeneous() *
-            (Rot3::new(Vec3::new(0.0, 0.0, -2.0 * std::f32::consts::PI * rot_angle.0))).to_homogeneous();
+        let model = Iso3::new(Vec3::z() * 5.0, Vec3::zero()).to_homogeneous() *
+            (Rot3::new(Vec3::x() *  2.0 * std::f32::consts::PI * mouse_movement.y)).to_homogeneous() *
+            (Rot3::new(Vec3::z() * -2.0 * std::f32::consts::PI * mouse_movement.x)).to_homogeneous();
 
         // create uniforms
         let uniforms = uniform!{ light_pos: light_pos,
             perspective: perspective, view: view, model: model,
             shadow_perspective: shadow_perspective, shadow_view: shadow_view,
-            shadow_map: shadow_texture.sampled()
-                .minify_filter(glium::uniforms::MinifySamplerFilter::Linear)
-                .magnify_filter(glium::uniforms::MagnifySamplerFilter::Linear)
-                .wrap_function(glium::uniforms::SamplerWrapFunction::Clamp),
+            shadow_map: &shadow_texture,
             };
         let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model }; 
 
@@ -153,15 +152,18 @@ fn main() {
                     mouse_pressed = true;
                     old_mouse_pos = mouse_pos;
                 },
-                MouseInput(ElementState::Released, MouseButton::Left) => mouse_pressed = false,
+                MouseInput(ElementState::Released, MouseButton::Left) => {
+                    mouse_pressed = false;
+                },
                 MouseMoved((x, y)) => {
-                    mouse_pos = (
+                    mouse_pos = Vec2::new(
                         2.0f32 * (x - width as i32 / 2) as f32 / height as f32,
                         2.0f32 * (height as i32 / 2 - y) as f32 / height as f32);
 
                     if mouse_pressed {
-                        rot_angle = (rot_angle.0 + mouse_pos.0 - old_mouse_pos.0,
-                            rot_angle.1 + mouse_pos.1 - old_mouse_pos.1);
+                        mouse_movement = mouse_movement + mouse_pos -
+                            old_mouse_pos;
+
                         old_mouse_pos = mouse_pos;
                     }
                 },
