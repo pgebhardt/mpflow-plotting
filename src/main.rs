@@ -120,7 +120,7 @@ fn main() {
             shadow_perspective: shadow_perspective, shadow_view: shadow_view,
             shadow_map: &shadow_texture,
             };
-        let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model }; 
+        let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model };
 
         // render shadow map
         shadow_buffer.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);

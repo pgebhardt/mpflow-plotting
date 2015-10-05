@@ -16,23 +16,23 @@ uniform mat4 model;
 uniform mat4 shadow_perspective;
 uniform mat4 shadow_view;
 const mat4 shadow_bias = mat4(
-	vec4(0.5, 0.0, 0.0, 0.0),
-	vec4(0.0, 0.5, 0.0, 0.0),
-	vec4(0.0, 0.0, 0.5, 0.0),
-	vec4(0.5, 0.5, 0.5, 1.0));
+    vec4(0.5, 0.0, 0.0, 0.0),
+    vec4(0.0, 0.5, 0.0, 0.0),
+    vec4(0.0, 0.0, 0.5, 0.0),
+    vec4(0.5, 0.5, 0.5, 1.0));
 
 void main() {
-	v_value = value;
-	
-	// position of vertex in clip space
-	gl_Position = perspective * view * model * vec4(position, 1.0);
+    v_value = value;
 
-	// normal of vertex in camera space
-	v_normal = transpose(inverse(mat3(view * model))) * normal;
-	
-	// position of vertex in camera space
-	v_position = (view * model * vec4(position, 1.0)).xyz;
+    // position of vertex in clip space
+    gl_Position = perspective * view * model * vec4(position, 1.0);
 
-	// position of vertex in shadow space
-	shadow_position = shadow_bias * shadow_perspective * shadow_view * model * vec4(position, 1.0);
+    // normal of vertex in camera space
+    v_normal = transpose(inverse(mat3(view * model))) * normal;
+
+    // position of vertex in camera space
+    v_position = (view * model * vec4(position, 1.0)).xyz;
+
+    // position of vertex in shadow space
+    shadow_position = shadow_bias * shadow_perspective * shadow_view * model * vec4(position, 1.0);
 }
