@@ -12,6 +12,13 @@ pub struct Vertex {
 }
 implement_vertex!(Vertex, position, normal, value);
 
+#[derive(Copy, Clone)]
+pub struct PortVertex {
+    position: [f32; 3],
+    color: [f32; 3],
+}
+implement_vertex!(PortVertex, position, color);
+
 pub fn generate_mesh<F>(facade: &F, nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>,
     reconstruction: &Vec<f32>, face_up: bool) -> glium::VertexBuffer<Vertex>
     where F: glium::backend::Facade {
@@ -26,7 +33,7 @@ pub fn generate_mesh<F>(facade: &F, nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i3
     let vertex_data: Vec<_> = elements.iter().zip(reconstruction).flat_map(|(indices, &value)| {
         // extract coordinates of triangle
         let triangle: Vec<_> = indices.iter().map(|&index| {
-            Vec3::new(nodes[index as usize][0] / radius, nodes[index as usize][1] / radius, -z_values[index as usize])
+            Vec3::new(nodes[index as usize][0] / radius, nodes[index as usize][1] / radius, z_values[index as usize])
         }).collect();
 
         // calculate normal of the triangle
@@ -51,6 +58,48 @@ pub fn generate_mesh<F>(facade: &F, nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i3
                 }
             ).collect::<Vec<_>>()
         }
+    }).collect();
+
+    // load data to gpu
+    glium::vertex::VertexBuffer::new(facade, &vertex_data).unwrap()
+}
+
+pub fn generate_ports<F>(facade: &F, nodes: &Vec<Vec<f32>>, edges: &Vec<Vec<i32>>, ports: &Vec<Vec<i32>>)
+    -> glium::VertexBuffer<PortVertex>
+    where F: glium::backend::Facade {
+    // calculate radius of mesh to scale each vertex to unit size
+    let radius = nodes.iter().fold(0.0f32, |acc, item| (item[0] * item[0] + item[1] * item[1]).sqrt().max(acc));
+
+    // create vertex array
+    let vertex_data: Vec<_> = ports.iter().enumerate().flat_map(|(i, e)| {
+        let mut port_edges = Vec::new();
+        for edge in e.iter() {
+            if *edge != -1 {
+                for node_index in edges[*edge as usize].iter() {
+                    // extract position and color
+                    let position = Vec3::new(nodes[*node_index as usize][0], nodes[*node_index as usize][1], 0.0)
+                        * 1.005 / radius;
+
+                    let color = {
+                        if i == 0 {
+                            [1.0f32, 0.0, 0.0]
+                        }
+                        else {
+                            [0.0f32, 0.0, 0.0]
+                        }
+                    };
+
+                    port_edges.push(
+                        PortVertex {
+                            position: *position.as_array(),
+                            color: color,
+                        }
+                    );
+                }
+            }
+        }
+
+        port_edges
     }).collect();
 
     // load data to gpu

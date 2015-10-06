@@ -64,6 +64,21 @@ fn main() {
     let front_faces = mesh::generate_mesh(&display, &nodes, &elements, &reconstruction, true);
     let back_faces = mesh::generate_mesh(&display, &nodes, &elements, &reconstruction, false);
 
+    // try to load ports
+    let ports = {
+        if let Some(edges) = load_txt::<i32>(&format!("{}/mesh/edges.txt", path)).ok() {
+            if let Some(ports) = load_txt::<i32>(&format!("{}/mesh/ports.txt", path)).ok() {
+                Some(mesh::generate_ports(&display, &nodes, &edges, &ports))
+            }
+            else {
+                None
+            }
+        }
+        else {
+            None
+        }
+    };
+
     // create shadow map
     let shadow_color_texture = glium::texture::Texture2d::empty(&display, 2048, 2048).unwrap();
     let shadow_texture = glium::texture::DepthTexture2d::empty_with_format(&display,
@@ -76,6 +91,8 @@ fn main() {
         include_str!("shaders/full/fragment.glsl"), None).unwrap();
     let shadow_program = glium::Program::from_source(&display, include_str!("shaders/shadow/vertex.glsl"),
         include_str!("shaders/shadow/fragment.glsl"), None).unwrap();
+    let ports_program = glium::Program::from_source(&display, include_str!("shaders/ports/vertex.glsl"),
+        include_str!("shaders/ports/fragment.glsl"), None).unwrap();
 
     // create draw parameter struct and enable depth testing
     let params = glium::DrawParameters {
@@ -85,6 +102,7 @@ fn main() {
             .. Default::default()
         },
         backface_culling: glium::draw_parameters::BackfaceCullingMode::CullClockWise,
+        line_width: Some(5.0),
         .. Default::default()
     };
 
@@ -112,7 +130,8 @@ fn main() {
         // rotate model according to mouse rotation
         let model = Iso3::new(Vec3::z() * 5.0, Vec3::zero()).to_homogeneous() *
             (Rot3::new(Vec3::x() *  2.0 * std::f32::consts::PI * mouse_movement.y)).to_homogeneous() *
-            (Rot3::new(Vec3::z() * -2.0 * std::f32::consts::PI * mouse_movement.x)).to_homogeneous();
+            (Rot3::new(Vec3::z() * -2.0 * std::f32::consts::PI * mouse_movement.x)).to_homogeneous() *
+            (Rot3::new(Vec3::y() *  1.0 * std::f32::consts::PI)).to_homogeneous();
 
         // create uniforms
         let uniforms = uniform!{ light_pos: light_pos,
@@ -129,6 +148,10 @@ fn main() {
             &shadow_program, &shadow_uniforms, &params).unwrap();
         shadow_buffer.draw(&back_faces, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
             &shadow_program, &shadow_uniforms, &params).unwrap();
+        if let Some(ref ports) = ports {
+            shadow_buffer.draw(ports, &glium::index::NoIndices(glium::index::PrimitiveType::LinesList),
+                &shadow_program, &shadow_uniforms, &params).unwrap();
+        }
 
         // start drawing on the frame
         let mut target = display.draw();
@@ -139,6 +162,10 @@ fn main() {
             &uniforms, &params).unwrap();
         target.draw(&back_faces, &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList), &program,
             &uniforms, &params).unwrap();
+        if let Some(ref ports) = ports {
+            target.draw(ports, &glium::index::NoIndices(glium::index::PrimitiveType::LinesList),
+                &ports_program, &uniforms, &params).unwrap();
+        }
 
         // drawing is finished, so swap buffers
         target.finish().unwrap();
