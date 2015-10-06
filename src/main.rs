@@ -91,13 +91,6 @@ fn main() {
         }
     };
 
-    // create shadow map
-    let shadow_color_texture = glium::texture::Texture2d::empty(&display, 2048, 2048).unwrap();
-    let shadow_texture = glium::texture::DepthTexture2d::empty_with_format(&display,
-        glium::texture::DepthFormat::F32, glium::texture::MipmapsOption::NoMipmap, 2048, 2048).unwrap();
-    let mut shadow_buffer = glium::framebuffer::SimpleFrameBuffer::with_depth_buffer(&display,
-        &shadow_color_texture, &shadow_texture).unwrap();
-
     // create glium program
     let program = glium::Program::from_source(&display, include_str!("shaders/full/vertex.glsl"),
         include_str!("shaders/full/fragment.glsl"), None).unwrap();
@@ -105,6 +98,13 @@ fn main() {
         include_str!("shaders/shadow/fragment.glsl"), None).unwrap();
     let ports_program = glium::Program::from_source(&display, include_str!("shaders/ports/vertex.glsl"),
         include_str!("shaders/ports/fragment.glsl"), None).unwrap();
+
+    // create shadow map
+    let shadow_color_texture = glium::texture::Texture2d::empty(&display, 2048, 2048).unwrap();
+    let shadow_texture = glium::texture::DepthTexture2d::empty_with_format(&display,
+        glium::texture::DepthFormat::F32, glium::texture::MipmapsOption::NoMipmap, 2048, 2048).unwrap();
+    let mut shadow_buffer = glium::framebuffer::SimpleFrameBuffer::with_depth_buffer(&display,
+        &shadow_color_texture, &shadow_texture).unwrap();
 
     // create draw parameter struct and enable depth testing
     let params = glium::DrawParameters {
@@ -146,11 +146,12 @@ fn main() {
             (Rot3::new(Vec3::y() *  1.0 * std::f32::consts::PI)).to_homogeneous();
 
         // create uniforms
-        let uniforms = uniform!{ light_pos: light_pos,
+        let uniforms = uniform!{
+            light_pos: light_pos,
             perspective: perspective, view: view, model: model,
             shadow_perspective: shadow_perspective, shadow_view: shadow_view,
             shadow_map: &shadow_texture,
-            };
+        };
         let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model };
 
         // render shadow map
