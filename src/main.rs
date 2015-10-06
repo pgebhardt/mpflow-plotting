@@ -84,7 +84,7 @@ fn main() {
             // load ports from extracted location
             config::extract_ports_path(&config)
                 .and_then(|ports_path| load_txt::<i32>(&format!("{}/{}", parent_path, ports_path)).ok())
-                .and_then(|ports| Some(mesh::generate_ports(&display, &nodes, &edges, &ports)))
+                .map(|ports| mesh::generate_ports(&display, &nodes, &edges, &ports))
         }
         else {
             None
