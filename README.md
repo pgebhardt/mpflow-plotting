@@ -8,4 +8,4 @@ mpFlow-plotting is a small rust command line tool to display reconstructed tomog
 
 ## Examples:
 
-The repository contains two simple examples from an ECT and an MWI reconstructed image.
+The repository contains two simple example reconstruction images from an ECT and an MWI system.
