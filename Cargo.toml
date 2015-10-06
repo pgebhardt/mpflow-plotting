@@ -1,6 +1,6 @@
 [package]
 name = "mpflow-plotting"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Patrik Gebhardt <patrik.gebhardt@rub.de>"]
 
 [dependencies]
