@@ -1,0 +1,24 @@
+{
+    "model": {
+        "numericType": "complex",
+        "ports": {
+            "count": 16,
+            "width": 0.007851851851851851,
+            "clockwise": true
+        },
+        "mesh": "mesh",
+        "2.5D": {
+            "height": 0.1            
+        },
+        "material": [0.0, 2.7816251401340456e-05],
+        "source": {
+            "type": "voltage"
+        }
+    },
+    "solver": {
+        "regularizationFactor": [0.0, 2e-5],
+        "regularizationType": "laplacian",
+        "parallelImages": 1,
+        "steps": 5
+    }
+}

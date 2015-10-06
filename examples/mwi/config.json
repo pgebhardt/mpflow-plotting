@@ -1,0 +1,25 @@
+{
+    "model": {
+        "material": 2.2,
+        "mesh": "mesh",
+        "mwi": {
+            "frequency": 1254200000.0,
+            "height": 0.225
+        },
+        "ports": {
+            "edges": "mesh/ports.txt",
+            "elements": "mesh/portElements.txt",
+            "height": 0.152,
+            "material": 3.1
+        },
+        "source": {
+            "value": 1.0
+        }
+    },
+    "solver": {
+        "parallelImages": 1,
+        "regularizationFactor": 10000.0,
+        "regularizationType": "laplacian",
+        "steps": 1
+    }
+}
