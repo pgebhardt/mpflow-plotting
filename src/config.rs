@@ -5,7 +5,7 @@ use rustc_serialize::json::Json;
 pub fn extract_mesh_path(config: &Json) -> Option<String> {
     // try to extract mesh path from config
     if let Some(config) = config.as_object() {
-        // try to fing model config
+        // try to get model config
         match config.get("model") {
             Some(&Json::Object(ref model_config)) => {
                 // try to extract mesh config
@@ -34,7 +34,7 @@ pub fn extract_mesh_path(config: &Json) -> Option<String> {
 pub fn extract_ports_path(config: &Json) -> Option<String> {
     // try to extract mesh path from config
     if let Some(config) = config.as_object() {
-        // try to fing model config
+        // try to get model config
         match config.get("model") {
             Some(&Json::Object(ref model_config)) => {
                 // try to extract ports config
