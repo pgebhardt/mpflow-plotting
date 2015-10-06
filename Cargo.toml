@@ -7,3 +7,4 @@ authors = ["Patrik Gebhardt <patrik.gebhardt@rub.de>"]
 nalgebra = "0.2"
 glium = "*"
 num = "*"
+rustc-serialize = "*"

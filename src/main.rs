@@ -2,13 +2,16 @@
 extern crate glium;
 extern crate nalgebra;
 extern crate num;
+extern crate rustc_serialize;
 
 mod numpy_compat;
 mod mesh;
+mod config;
 
 use numpy_compat::{load_txt, load_complex};
 use num::complex::Complex;
 use num::traits::Zero;
+use rustc_serialize::json::Json;
 
 fn load_measuerement(filename: &str) -> std::io::Result<Vec<Complex<f32>>> {
     // load only the first column of reconstruction from file
@@ -45,18 +48,28 @@ fn main() {
         .with_depth_buffer(24)
         .build_glium().unwrap();
 
-    // get path of data from command line
-    let path = std::env::args().nth(1)
-        .expect("You have to give the path to a model");
+    // get path to config file and parent_path
+    let config_path = std::env::args().nth(1)
+        .expect("You have to give the path to a model config");
+    let parent_path = std::path::Path::new(&config_path).parent().unwrap().to_str().unwrap();
 
-    // load mesh from files
-    let nodes: Vec<Vec<f32>> = load_txt(&format!("{}/mesh/nodes.txt", path))
+    // open and parse config file
+    let config = std::fs::File::open(&config_path).ok()
+        .and_then(|mut file| Json::from_reader(&mut file).ok())
+        .expect(&format!("Cannot open config file: {}", config_path));
+
+    // load mesh files from mesh location
+    let mesh_path = config::extract_mesh_path(&config)
+        .expect(&format!("Cannot extract mesh path from config file: {}", config_path));
+    let nodes: Vec<Vec<f32>> = load_txt(&format!("{}/{}/nodes.txt", parent_path, mesh_path))
         .ok().expect("Cannot open mesh nodes file!");
-    let elements: Vec<Vec<i32>> = load_txt(&format!("{}/mesh/elements.txt", path))
+    let elements: Vec<Vec<i32>> = load_txt(&format!("{}/{}/elements.txt", parent_path, mesh_path))
         .ok().expect("Cannot open mesh elements file!");
 
-    // load mesh and reconstruction from file
-    let reconstruction: Vec<f32> = load_measuerement(&format!("{}/reconstruction.txt", path))
+    // load reconstruction from file and extract only the real part
+    let reconstruction_path = std::env::args().nth(2)
+        .unwrap_or(format!("{}/reconstruction.txt", parent_path));
+    let reconstruction: Vec<f32> = load_measuerement(&reconstruction_path)
         .ok().expect("Cannot load reconstruction from file!")
         .iter().map(|v| v.re).collect();
 
@@ -66,13 +79,12 @@ fn main() {
 
     // try to load ports
     let ports = {
-        if let Some(edges) = load_txt::<i32>(&format!("{}/mesh/edges.txt", path)).ok() {
-            if let Some(ports) = load_txt::<i32>(&format!("{}/mesh/ports.txt", path)).ok() {
-                Some(mesh::generate_ports(&display, &nodes, &edges, &ports))
-            }
-            else {
-                None
-            }
+        // try to load edges from mesh location
+        if let Ok(edges) = load_txt::<i32>(&format!("{}/{}/edges.txt", parent_path, mesh_path)) {
+            // load ports from extracted location
+            config::extract_ports_path(&config)
+                .and_then(|ports_path| load_txt::<i32>(&format!("{}/{}", parent_path, ports_path)).ok())
+                .and_then(|ports| Some(mesh::generate_ports(&display, &nodes, &edges, &ports)))
         }
         else {
             None
