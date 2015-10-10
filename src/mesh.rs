@@ -19,9 +19,9 @@ pub struct PortVertex {
 }
 implement_vertex!(PortVertex, position, color);
 
-pub fn generate_mesh<F>(facade: &F, nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>,
-    reconstruction: &Vec<f32>, face_up: bool) -> glium::VertexBuffer<Vertex>
-    where F: glium::backend::Facade {
+pub fn generate_mesh<F: glium::backend::Facade>(facade: &F,
+    nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>, reconstruction: &Vec<f32>, face_up: bool)
+    -> Result<glium::VertexBuffer<Vertex>, glium::vertex::BufferCreationError> {
 
     // create interpolated z values
     let z_values = calculate_z_values(nodes, elements, reconstruction);
@@ -61,40 +61,30 @@ pub fn generate_mesh<F>(facade: &F, nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i3
     }).collect();
 
     // load data to gpu
-    glium::vertex::VertexBuffer::new(facade, &vertex_data).unwrap()
+    glium::vertex::VertexBuffer::new(facade, &vertex_data)
 }
 
-pub fn generate_ports<F>(facade: &F, nodes: &Vec<Vec<f32>>, edges: &Vec<Vec<i32>>, ports: &Vec<Vec<i32>>)
-    -> glium::VertexBuffer<PortVertex>
-    where F: glium::backend::Facade {
+pub fn generate_ports<F: glium::backend::Facade>(facade: &F,
+    nodes: &Vec<Vec<f32>>, edges: &Vec<Vec<i32>>, ports: &Vec<Vec<i32>>)
+    -> Result<glium::VertexBuffer<PortVertex>, glium::vertex::BufferCreationError> {
     // calculate radius of mesh to scale each vertex to unit size
     let radius = nodes.iter().fold(0.0f32, |acc, item| (item[0] * item[0] + item[1] * item[1]).sqrt().max(acc));
 
     // create vertex array
     let vertex_data: Vec<_> = ports.iter().enumerate().flat_map(|(i, e)| {
         let mut port_edges = Vec::new();
-        for edge in e.iter() {
-            if *edge != -1 {
-                for node_index in edges[*edge as usize].iter() {
-                    // extract position and color
-                    let position = Vec3::new(nodes[*node_index as usize][0], nodes[*node_index as usize][1], 0.0)
-                        * 1.005 / radius;
+        for &edge in e.iter() {
+            // don't use invalid node indices
+            if edge != -1 {
+                // create one vertex for each node of the port edges
+                // the first port is colored red
+                for &index in edges[edge as usize].iter() {
+                    let index = index as usize;
 
-                    let color = {
-                        if i == 0 {
-                            [1.0f32, 0.0, 0.0]
-                        }
-                        else {
-                            [0.0f32, 0.0, 0.0]
-                        }
-                    };
-
-                    port_edges.push(
-                        PortVertex {
-                            position: *position.as_array(),
-                            color: color,
-                        }
-                    );
+                    port_edges.push(PortVertex {
+                        position: *(Vec3::new(nodes[index][0], nodes[index][1], 0.0) * 1.005 / radius).as_array(),
+                        color: [if i == 0 { 1.0 } else { 0.0 }, 0.0, 0.0],
+                    });
                 }
             }
         }
@@ -103,7 +93,7 @@ pub fn generate_ports<F>(facade: &F, nodes: &Vec<Vec<f32>>, edges: &Vec<Vec<i32>
     }).collect();
 
     // load data to gpu
-    glium::vertex::VertexBuffer::new(facade, &vertex_data).unwrap()
+    glium::vertex::VertexBuffer::new(facade, &vertex_data)
 }
 
 fn calculate_z_values(nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>, values: &Vec<f32>) -> Vec<f32> {

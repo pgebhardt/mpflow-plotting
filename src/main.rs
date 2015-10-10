@@ -74,8 +74,8 @@ fn main() {
         .iter().map(|v| v.re).collect();
 
     // generate mesh
-    let front_faces = mesh::generate_mesh(&display, &nodes, &elements, &reconstruction, true);
-    let back_faces = mesh::generate_mesh(&display, &nodes, &elements, &reconstruction, false);
+    let front_faces = mesh::generate_mesh(&display, &nodes, &elements, &reconstruction, true).unwrap();
+    let back_faces = mesh::generate_mesh(&display, &nodes, &elements, &reconstruction, false).unwrap();
 
     // try to load ports
     let ports = {
@@ -84,7 +84,7 @@ fn main() {
             // load ports from extracted location
             config::extract_ports_path(&config)
                 .and_then(|ports_path| load_txt::<i32>(&format!("{}/{}", parent_path, ports_path)).ok())
-                .map(|ports| mesh::generate_ports(&display, &nodes, &edges, &ports))
+                .and_then(|ports| mesh::generate_ports(&display, &nodes, &edges, &ports).ok())
         }
         else {
             None
