@@ -28,7 +28,7 @@ fn load_measuerement(filename: &str) -> std::io::Result<Vec<Complex<f32>>> {
     Ok(array.iter().map(|val| {
         Complex::new((val.re - 1.0) / norm_real,
             val.im / norm_imag)
-    }).collect::<Vec<_>>())
+    }).collect())
 }
 
 fn main() {
