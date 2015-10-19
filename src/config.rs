@@ -3,6 +3,8 @@ extern crate rustc_serialize;
 use rustc_serialize::json::Json;
 
 pub fn extract_mesh_path(config: &Json) -> Option<String> {
+    let default = Some("mesh".to_string());
+
     // try to extract mesh path from config
     if let Some(config) = config.as_object() {
         // try to get model config
@@ -17,10 +19,10 @@ pub fn extract_mesh_path(config: &Json) -> Option<String> {
                     Some(&Json::Object(ref mesh_config)) => {
                         match mesh_config.get("path") {
                             Some(&Json::String(ref path)) => Some(path.clone()),
-                            _ => None,
+                            _ => default,
                         }
                     },
-                    _ => None,
+                    _ => default,
                 }
             },
             _ => None,
