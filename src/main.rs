@@ -92,8 +92,8 @@ fn main() {
     };
 
     // create glium program
-    let program = glium::Program::from_source(&display, include_str!("shaders/full/vertex.glsl"),
-        include_str!("shaders/full/fragment.glsl"), None).unwrap();
+    let program = glium::Program::from_source(&display, include_str!("shaders/main/vertex.glsl"),
+        include_str!("shaders/main/fragment.glsl"), None).unwrap();
     let shadow_program = glium::Program::from_source(&display, include_str!("shaders/shadow/vertex.glsl"),
         include_str!("shaders/shadow/fragment.glsl"), None).unwrap();
     let ports_program = glium::Program::from_source(&display, include_str!("shaders/ports/vertex.glsl"),
