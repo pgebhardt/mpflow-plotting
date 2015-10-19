@@ -6,7 +6,7 @@ in float value;
 
 out vec3 v_normal;
 out vec3 v_position;
-out float v_value;
+out vec3 v_color;
 out vec4 shadow_position;
 
 uniform mat4 perspective;
@@ -21,8 +21,21 @@ const mat4 shadow_bias = mat4(
     vec4(0.0, 0.0, 0.5, 0.0),
     vec4(0.5, 0.5, 0.5, 1.0));
 
+vec3 jet_color(float value) {
+    // correct value space
+    float normalized_value = 0.5 * value + 0.5;
+
+    // calculate colors
+    float red = min(max(-4.0 * abs(normalized_value - 0.75) + 1.5, 0.0), 1.0);
+    float green = min(max(-4.0 * abs(normalized_value - 0.5) + 1.5, 0.0), 1.0);
+    float blue = min(max(-4.0 * abs(normalized_value - 0.25) + 1.5, 0.0), 1.0);
+
+    return vec3(red, green, blue);
+}
+
 void main() {
-    v_value = value;
+    // calculate color
+    v_color = jet_color(value);
 
     // position of vertex in clip space
     gl_Position = perspective * view * model * vec4(position, 1.0);
