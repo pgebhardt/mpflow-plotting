@@ -43,8 +43,8 @@ pub fn generate_mesh<F: glium::backend::Facade>(facade: &F,
         if normal.z <= 0.0 && face_up || normal.z > 0.0 && !face_up {
             triangle.iter().map(|&node|
                 Vertex {
-                    position: *node.as_array(),
-                    normal: *normal.as_array(),
+                    position: *node.as_ref(),
+                    normal: *normal.as_ref(),
                     value: value,
                 }
             ).collect::<Vec<_>>()
@@ -52,8 +52,8 @@ pub fn generate_mesh<F: glium::backend::Facade>(facade: &F,
         else {
             triangle.iter().rev().map(|&node|
                 Vertex {
-                    position: *node.as_array(),
-                    normal: *(-normal).as_array(),
+                    position: *node.as_ref(),
+                    normal: *(-normal).as_ref(),
                     value: value,
                 }
             ).collect::<Vec<_>>()
@@ -82,7 +82,7 @@ pub fn generate_ports<F: glium::backend::Facade>(facade: &F,
                     let index = index as usize;
 
                     port_edges.push(PortVertex {
-                        position: *(Vec3::new(nodes[index][0], nodes[index][1], 0.0) * 1.005 / radius).as_array(),
+                        position: *(Vec3::new(nodes[index][0], nodes[index][1], 0.0) * 1.005 / radius).as_ref(),
                         color: [if i == 0 { 1.0 } else { 0.0 }, 0.0, 0.0],
                     });
                 }

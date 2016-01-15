@@ -37,7 +37,7 @@ fn main() {
     use glium::{DisplayBuild, Surface};
     use glium::glutin::{ElementState, MouseButton};
     use glium::glutin::Event::{Closed, MouseInput, MouseMoved};
-    use nalgebra::{PerspMat3, Iso3, Vec3, Vec2, ToHomogeneous, Rot3};
+    use nalgebra::{PerspMat3, Iso3, Mat4, Vec3, Vec2, ToHomogeneous, Rot3};
 
     // create window
     let display = glium::glutin::WindowBuilder::new()
@@ -137,7 +137,7 @@ fn main() {
 
         // create view and perspective matrix
         let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 6.0, 0.1, 10.0);
-        let view = Iso3::new(Vec3::zero(), Vec3::zero()).to_homogeneous();
+        let view: Mat4<f32> = Iso3::new(Vec3::zero(), Vec3::zero()).to_homogeneous();
 
         // rotate model according to mouse rotation
         let model = Iso3::new(Vec3::z() * 5.0, Vec3::zero()).to_homogeneous() *
@@ -147,12 +147,12 @@ fn main() {
 
         // create uniforms
         let uniforms = uniform!{
-            light_pos: light_pos,
-            perspective: perspective, view: view, model: model,
-            shadow_perspective: shadow_perspective, shadow_view: shadow_view,
+            light_pos: *light_pos.as_ref(),
+            perspective: *perspective.as_mat().as_ref(), view: *view.as_ref(), model: *model.as_ref(),
+            shadow_perspective: *shadow_perspective.as_mat().as_ref(), shadow_view: *shadow_view.as_ref(),
             shadow_map: &shadow_texture,
         };
-        let shadow_uniforms = uniform!{ perspective: shadow_perspective, view: shadow_view, model: model };
+        let shadow_uniforms = uniform!{ perspective: *shadow_perspective.as_mat().as_ref(), view: *shadow_view.as_ref(), model: *model.as_ref() };
 
         // render shadow map
         shadow_buffer.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
