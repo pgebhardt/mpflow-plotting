@@ -92,12 +92,12 @@ fn main() {
     };
 
     // create glium program
-    let program = glium::Program::from_source(&display, include_str!("shaders/main/vertex.glsl"),
-        include_str!("shaders/main/fragment.glsl"), None).unwrap();
-    let shadow_program = glium::Program::from_source(&display, include_str!("shaders/shadow/vertex.glsl"),
-        include_str!("shaders/shadow/fragment.glsl"), None).unwrap();
-    let ports_program = glium::Program::from_source(&display, include_str!("shaders/ports/vertex.glsl"),
-        include_str!("shaders/ports/fragment.glsl"), None).unwrap();
+    let program = glium::Program::from_source(&display, include_str!("shaders/main.vert"),
+        include_str!("shaders/main.frag"), None).unwrap();
+    let shadow_program = glium::Program::from_source(&display, include_str!("shaders/shadow.vert"),
+        include_str!("shaders/shadow.frag"), None).unwrap();
+    let ports_program = glium::Program::from_source(&display, include_str!("shaders/ports.vert"),
+        include_str!("shaders/ports.frag"), None).unwrap();
 
     // create shadow map
     let shadow_color_texture = glium::texture::Texture2d::empty(&display, 2048, 2048).unwrap();
