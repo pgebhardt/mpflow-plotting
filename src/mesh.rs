@@ -19,8 +19,8 @@ pub struct PortVertex {
 }
 implement_vertex!(PortVertex, position, color);
 
-pub fn generate_mesh<F: glium::backend::Facade>(facade: &F,
-    nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>, reconstruction: &Vec<f32>, face_up: bool)
+pub fn generate_mesh<F: glium::backend::Facade>(facade: &F, nodes: &Vec<Vec<f32>>,
+    elements: &Vec<Vec<i32>>, reconstruction: &Vec<f32>, face_up: bool)
     -> Result<glium::VertexBuffer<Vertex>, glium::vertex::BufferCreationError> {
 
     // create interpolated z values
