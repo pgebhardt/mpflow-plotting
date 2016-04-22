@@ -37,7 +37,8 @@ fn main() {
     use glium::{DisplayBuild, Surface};
     use glium::glutin::{ElementState, MouseButton};
     use glium::glutin::Event::{Closed, MouseInput, MouseMoved};
-    use nalgebra::{PerspMat3, Iso3, Mat4, Vec3, Vec2, ToHomogeneous, Rot3};
+    use nalgebra::{PerspectiveMatrix3, Isometry3, Matrix4, Vector3, Vector2, ToHomogeneous,
+         Rotation3};
 
     // create window
     let display = glium::glutin::WindowBuilder::new()
@@ -119,40 +120,51 @@ fn main() {
     };
 
     // position of light source
-    let light_pos = Vec3::new(0.0f32, 2.0, 3.0);
+    let light_pos = Vector3::new(0.0f32, 2.0, -3.0);
 
     // create transformation matrices to render shadow map from lights point of view
-    let shadow_perspective = PerspMat3::new(1.0, std::f32::consts::PI / 3.0, 0.1, 10.0);
-    let shadow_view = (Rot3::new(Vec3::x() * -std::f32::consts::PI / 4.0)).to_homogeneous() *
-        Iso3::new(-light_pos, Vec3::zero()).to_homogeneous();
+    let shadow_perspective = PerspectiveMatrix3::new(1.0, std::f32::consts::PI / 3.0, 0.1, 10.0);
+    let shadow_view =
+        Rotation3::new(Vector3::x() * std::f32::consts::PI / 4.0).to_homogeneous() *
+        Isometry3::new(-light_pos, Vector3::zero()).to_homogeneous();
 
     // start event loop, exit loop when window closes
     let mut mouse_pressed = false;
-    let mut mouse_pos = Vec2::new(0.0f32, 0.0);
-    let mut old_mouse_pos = Vec2::new(0.0f32, 0.0);
-    let mut mouse_movement = Vec2::new(0.0f32, 0.0);
+    let mut mouse_pos = Vector2::new(0.0f32, 0.0);
+    let mut old_mouse_pos = Vector2::new(0.0f32, 0.0);
+    let mut mouse_movement = Vector2::new(0.0f32, 0.0);
     loop {
         // get current dimensions of main framebuffer
         let (width, height) = display.get_framebuffer_dimensions();
 
         // create view and perspective matrix
-        let perspective = PerspMat3::new(width as f32 / height as f32, std::f32::consts::PI / 6.0, 0.1, 10.0);
-        let view: Mat4<f32> = Iso3::new(Vec3::zero(), Vec3::zero()).to_homogeneous();
+        let perspective = PerspectiveMatrix3::new(width as f32 / height as f32,
+            std::f32::consts::PI / 6.0, 0.1, 10.0);
+        let view: Matrix4<f32> = Isometry3::new(Vector3::zero(), Vector3::zero()).to_homogeneous();
 
         // rotate model according to mouse rotation
-        let model = Iso3::new(Vec3::z() * 5.0, Vec3::zero()).to_homogeneous() *
-            (Rot3::new(Vec3::x() *  2.0 * std::f32::consts::PI * mouse_movement.y)).to_homogeneous() *
-            (Rot3::new(Vec3::z() * -2.0 * std::f32::consts::PI * mouse_movement.x)).to_homogeneous() *
-            (Rot3::new(Vec3::y() *  1.0 * std::f32::consts::PI)).to_homogeneous();
+        let model =
+            Isometry3::new(-Vector3::z() * 5.0, Vector3::zero()).to_homogeneous() *
+            Rotation3::new(
+                Vector3::x() * -2.0 * std::f32::consts::PI * mouse_movement.y).to_homogeneous() *
+            Rotation3::new(
+                Vector3::z() * 2.0 * std::f32::consts::PI * mouse_movement.x).to_homogeneous();
 
         // create uniforms
         let uniforms = uniform!{
             light_pos: *light_pos.as_ref(),
-            perspective: *perspective.as_mat().as_ref(), view: *view.as_ref(), model: *model.as_ref(),
-            shadow_perspective: *shadow_perspective.as_mat().as_ref(), shadow_view: *shadow_view.as_ref(),
+            perspective: *perspective.as_matrix().as_ref(),
+            view: *view.as_ref(),
+            model: *model.as_ref(),
+            shadow_perspective: *shadow_perspective.as_matrix().as_ref(),
+            shadow_view: *shadow_view.as_ref(),
             shadow_map: &shadow_texture,
         };
-        let shadow_uniforms = uniform!{ perspective: *shadow_perspective.as_mat().as_ref(), view: *shadow_view.as_ref(), model: *model.as_ref() };
+        let shadow_uniforms = uniform!{
+            perspective: *shadow_perspective.as_matrix().as_ref(),
+            view: *shadow_view.as_ref(),
+            model: *model.as_ref()
+        };
 
         // render shadow map
         shadow_buffer.clear_color_and_depth((1.0, 1.0, 1.0, 1.0), 1.0);
@@ -195,8 +207,8 @@ fn main() {
                 MouseInput(ElementState::Released, MouseButton::Left) => {
                     mouse_pressed = false;
                 },
-                MouseMoved((x, y)) => {
-                    mouse_pos = Vec2::new(
+                MouseMoved(x, y) => {
+                    mouse_pos = Vector2::new(
                         2.0f32 * (x - width as i32 / 2) as f32 / height as f32,
                         2.0f32 * (height as i32 / 2 - y) as f32 / height as f32);
 

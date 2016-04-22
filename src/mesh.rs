@@ -1,7 +1,7 @@
 extern crate glium;
 extern crate nalgebra;
 
-use nalgebra::{Vec3, Norm};
+use nalgebra::{Vector3, Norm};
 
 // vertex format
 #[derive(Copy, Clone)]
@@ -33,7 +33,7 @@ pub fn generate_mesh<F: glium::backend::Facade>(facade: &F, nodes: &Vec<Vec<f32>
     let vertex_data: Vec<_> = elements.iter().zip(reconstruction).flat_map(|(indices, &value)| {
         // extract coordinates of triangle
         let triangle: Vec<_> = indices.iter().map(|&index| {
-            Vec3::new(nodes[index as usize][0] / radius, nodes[index as usize][1] / radius, z_values[index as usize])
+            Vector3::new(nodes[index as usize][0] / radius, nodes[index as usize][1] / radius, z_values[index as usize])
         }).collect();
 
         // calculate normal of the triangle
@@ -82,7 +82,7 @@ pub fn generate_ports<F: glium::backend::Facade>(facade: &F,
                     let index = index as usize;
 
                     port_edges.push(PortVertex {
-                        position: *(Vec3::new(nodes[index][0], nodes[index][1], 0.0) * 1.005 / radius).as_ref(),
+                        position: *(Vector3::new(nodes[index][0], nodes[index][1], 0.0) * 1.005 / radius).as_ref(),
                         color: [if i == 0 { 1.0 } else { 0.0 }, 0.0, 0.0],
                     });
                 }
@@ -124,11 +124,11 @@ fn calculate_z_values(nodes: &Vec<Vec<f32>>, elements: &Vec<Vec<i32>>, values: &
     z_values
 }
 
-fn calculate_normal(p1: &Vec3<f32>, p2: &Vec3<f32>, p3: &Vec3<f32>) -> Vec3<f32> {
+fn calculate_normal(p1: &Vector3<f32>, p2: &Vector3<f32>, p3: &Vector3<f32>) -> Vector3<f32> {
     let u = *p2 - *p1;
     let v = *p3 - *p1;
 
-    Vec3::new(
+    Vector3::new(
         u.y * v.z - u.z * v.y,
         u.z * v.x - u.x * v.z,
         u.x * v.y - u.y * v.x,
